@@ -103,6 +103,17 @@ export class AVTableSheet extends TableSheet {
     this.on(S2Event.GLOBAL_SCROLL, this.handleScrollbarScroll.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_MOVE, this.handleMouseMove.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_UP, this.handleMouseUp.bind(this))
+    // this.checkContextLostTimeInterval = window.setInterval(() => {
+    //   const canvas = this.getCanvasElement()
+    //   const ctx = canvas?.getContext("2d")
+    //   if (ctx) {
+    //     const dpr = this.options.devicePixelRatio ?? window.devicePixelRatio
+    //     if (ctx.getTransform().a !== window.devicePixelRatio) {
+    //       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    //       this.render(false)
+    //     }
+    //   }
+    // }, 500)
   }
 
   updateAVStore(newAVStore: TAVExtraOptions) {
