@@ -1,5 +1,11 @@
 import type { TColorEntry } from "./AlignmentColorSchema"
-import type { TAlignment, TAlignmentPositionsToStyle } from "./Alignment"
+import type { TPssm, TSequenceGroup, TAlignmentPositionsToStyle } from "./Alignment"
+import type { ObjectPool } from "./objectPool"
+
+import { LRUMap } from "./lru"
+
+import { useCallback, useMemo } from "react"
+import { isArray } from "lodash"
 
 type TSequenceLogosParams = {
   alphabet: string,
@@ -17,83 +23,108 @@ type TSequenceLogosParams = {
   positionsToStyle: TAlignmentPositionsToStyle,
 }
 
-export type TSequenceLogosGroupsProps = TSequenceLogosParams & {
-  groups: TAlignment["groups"],
+type TUseSequenceLogosProps = TSequenceLogosParams & {
+  pssmOrGroups?: TPssm | TSequenceGroup[],
+  offscreenCanvasPool: ObjectPool<OffscreenCanvas>,
 }
 
-export type TSequenceLogosProps = TSequenceLogosParams & {
-  pssm: ReadonlyArray<ReadonlyArray<number>>,
-  pssmSortedIndices: ReadonlyArray<ReadonlyArray<number>>,
+export type TSequenceLogos = undefined | {
+  props: TUseSequenceLogosProps,
+  get: (sequencePosition: number, groupIndex?: number) => OffscreenCanvas | undefined,
 }
 
-export class SequenceLogos {
-  props: TSequenceLogosProps
-  protected logos: Array<OffscreenCanvas | undefined>
-
-  constructor(props: TSequenceLogosProps) {
-    this.props = props
-    this.logos = new Array(this.props.pssm.length).fill(undefined)
-  }
-
-  get(position: number) {
-    if ((position < this.logos.length) && (this.logos[position] === undefined)) {
-      this.makeLogo(position)
+export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos {
+  const groups = useMemo(() => {
+    if (!props.pssmOrGroups) {
+      return []
     }
-    return this.logos[position]
-  }
 
-  protected makeLogo(position: number): void {
-    const {
-      pssm, 
-      pssmSortedIndices, 
-      alphabet, 
-      width, 
-      height, 
-      fontSize, 
-      fontFamily, 
-      fontWidth,
-      fontActualBoundingBoxAscents, 
-      fontActualBoundingBoxDescents,
-      colorPalette, 
-      defaultTextColor,
-      backgroundColor,
-      compareToSequence, 
-      positionsToStyle, 
-    } = this.props
-    
+    if (isArray(props.pssmOrGroups)) {
+      return props.pssmOrGroups
+    } else {
+      return [{
+        members: [],
+        pssm: props.pssmOrGroups,
+      }]
+    }
+  }, [props.pssmOrGroups])
+
+  const {
+    offscreenCanvasPool,
+    alphabet,
+    width, 
+    height, 
+    fontSize, 
+    fontFamily, 
+    fontWidth,
+    fontActualBoundingBoxAscents, 
+    fontActualBoundingBoxDescents,
+    colorPalette, 
+    defaultTextColor,
+    backgroundColor,
+    compareToSequence, 
+    positionsToStyle, 
+  } = props
+
+  const capacity = offscreenCanvasPool.capacity()
+  const logosCache = useMemo(() => (
+    new LRUMap<number, OffscreenCanvas>(capacity)
+  ), [capacity])
+  
+  const getLogo = useCallback((sequencePosition: number, groupIndex: number = 0) => {
     const dpr = window.devicePixelRatio
-    this.logos[position] = new OffscreenCanvas(width * dpr, height * dpr)
-    const ctx = this.logos[position]?.getContext("2d")
+    const { pssm } = groups[groupIndex]
+    const key = groupIndex * pssm.length + sequencePosition
+    let logo = logosCache.get(key)
+    if (logo) {
+      return logo
+    }
+
+    if (logosCache.size === capacity) {
+      [, logo] = logosCache.shift()
+    } else {
+      logo = offscreenCanvasPool.take()
+    }
+
+    if (!logo) {
+      return undefined
+    }
+
+    const ctx = logo.getContext("2d")
     if (!ctx) {
-      return 
+      offscreenCanvasPool.release(logo)
+      return undefined
     }
     ctx.imageSmoothingEnabled = true
-    ctx.textRendering = "optimizeSpeed"
+    // ctx.textRendering = "optimizeSpeed"
     ctx.font = `${fontSize}px ${fontFamily}`
 
     ctx.fillStyle = backgroundColor
+    ctx.resetTransform()
     ctx.fillRect(0, 0, width * dpr, height * dpr)
     
-    const sortedIndices = pssmSortedIndices[position]
+    const indexingOffset = sequencePosition * pssm.numSymbols
     let y = height
     const x = dpr * (width - fontWidth)/2
-    for (const j of sortedIndices) {
-      if (pssm[position][j] === 0) {
+    for (let i = 0; i < pssm.numSymbols; ++i) {
+      const j = pssm.sortedIndices[indexingOffset + i]
+      if (j === pssm.numSymbols - 1) { // gap
         continue
       }
 
-      if (j === alphabet.length) { // gap
+      const percentage = pssm.values[indexingOffset + j]
+      if (percentage <= 0) {
         continue
       }
 
       if (
-        (((positionsToStyle === "sameAsReference") || (positionsToStyle === "sameAsConsensus")) && (alphabet[j] !== compareToSequence[position])) ||
-        (((positionsToStyle === "differentFromReference") || (positionsToStyle === "differentFromConsensus")) && (alphabet[j] === compareToSequence[position]))
+        (((positionsToStyle === "sameAsReference") || (positionsToStyle === "sameAsConsensus")) && (alphabet[j] !== compareToSequence[sequencePosition])) ||
+        (((positionsToStyle === "differentFromReference") || (positionsToStyle === "differentFromConsensus")) && (alphabet[j] === compareToSequence[sequencePosition]))
       ) {
         continue
       }
       
-      const letterHeight = pssm[position][j] * height
+      const letterHeight = height * percentage / 100
       ctx.fillStyle = colorPalette.get(alphabet[j])?.color ?? defaultTextColor
       const paddingBottom = 5 / letterHeight
       // const paddingBottom = 2 / Math.sqrt(letterHeight)
@@ -105,32 +136,40 @@ export class SequenceLogos {
       ctx.fillText(alphabet[j], 0, 0)
       y -= scaleY * fontActualBoundingBoxAscents[j]  
     }
-  }
-}
 
+    logosCache.set(key, logo)
+    return logo
+  }, [
+    groups, 
+    offscreenCanvasPool,
+    capacity,
+    logosCache,
+    width, 
+    height, 
+    alphabet,
+    fontSize, 
+    fontFamily, 
+    fontWidth,
+    fontActualBoundingBoxAscents, 
+    fontActualBoundingBoxDescents,
+    colorPalette, 
+    defaultTextColor,
+    backgroundColor,
+    compareToSequence, 
+    positionsToStyle, 
+  ])
 
-export class SequenceLogosGroups {
-  props: TSequenceLogosGroupsProps
-  protected groupLogos: Array<SequenceLogos | undefined>
-
-  constructor(props: TSequenceLogosGroupsProps) {
-    this.props = props
-    this.groupLogos = new Array(this.props.groups.length).fill(undefined)
-  }
-
-  get(groupIndex: number) {
-    if ((groupIndex < this.groupLogos.length) && (this.groupLogos[groupIndex] === undefined)) {
-      this.createLogos(groupIndex)
+  useMemo(() => {
+    getLogo
+    for (const v of logosCache.values()) {
+      if (v) {
+        offscreenCanvasPool.release(v)
+      }
     }
-    return this.groupLogos[groupIndex]
-  }
+    logosCache.clear()
+  }, [getLogo, logosCache, offscreenCanvasPool])
 
-  protected createLogos(groupIndex: number): void {
-    const { groups, ...otherProps } = this.props
-    this.groupLogos[groupIndex] = new SequenceLogos({
-      pssm: groups[groupIndex].pssm,
-      pssmSortedIndices: groups[groupIndex].pssmSortedIndices,
-      ...otherProps,
-    })
-  }
+  return { props, get: getLogo }
 }
+
+

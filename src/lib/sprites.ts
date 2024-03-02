@@ -4,6 +4,7 @@ import { isString } from "lodash"
 
 export type TSpriteProps = {
   alphabet: string,
+  dpr: number,
   width: number,
   height: number,
   font: string,
@@ -32,6 +33,7 @@ export default class Sprites {
   protected makeSprite(key: string): OffscreenCanvas {
     const {
       alphabet,
+      dpr,
       width, 
       height, 
       font, 
@@ -46,7 +48,6 @@ export default class Sprites {
     } = this.props
     const spriteWidth = width
     const spriteHeight = isOverviewMode ? width : height
-    const dpr = window.devicePixelRatio
     const canvas = new OffscreenCanvas(spriteWidth * dpr, spriteHeight * dpr)
     const ctx = canvas.getContext("2d")
     if (ctx) {
@@ -71,7 +72,7 @@ export default class Sprites {
           ctx.rotate(rotation)
         }
         
-        if (!!font) {
+        if (font) {
           ctx.font = font
         }
         

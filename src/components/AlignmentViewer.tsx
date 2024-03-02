@@ -39,7 +39,8 @@ import { HIDDEN_ANNOTATION_FIELDS } from '../lib/Alignment'
 import { alignmentColorModes } from '../lib/AlignmentColorSchema'
 import Sprites from '../lib/sprites'
 import BarSprites from '../lib/BarSprites'
-import { SequenceLogos, SequenceLogosGroups } from '../lib/sequenceLogos'
+import { ObjectPool } from "../lib/objectPool"
+import { useSequenceLogos } from '../lib/sequenceLogos'
 
 import clsx from 'clsx'
 import { spawn, Thread, Worker } from 'threads'
@@ -510,6 +511,8 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   const [sortedIndices, setSortedIndices] = useState<number[]>([])
   const [overviewImageData, setOverviewImageData] = useState<ImageData | undefined>(undefined)
   const [minimapImage, setMinimapImage] = useState<OffscreenCanvas>()
+  const maxMinimapWidth = dimensions.maxMinimapWidth
+  const maxMinimapHeight = window.innerHeight
   useEffect(() => {
     async function asyncUpdate() {
       onBusy?.(true)
@@ -570,9 +573,6 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
         onBusy?.(false)
         return
       }
-
-      const maxMinimapWidth = 500
-      const maxMinimapHeight = 4000
       
       const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
       const remoteUpdateAlignment = await spawn(worker)
@@ -676,6 +676,8 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     alignmentColorPalette,
     propsAlignmentColorMode,
     alignmentColorMode,
+    maxMinimapWidth,
+    maxMinimapHeight,
     onBusy,
     onGroupsChanged,
   ])
@@ -753,7 +755,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     fieldWidths: {},
     isGrouped: !!(alignment?.groupBy),
     isResizing: false,
-    isOverviewMode,
+    zoom,
   })
 
   // console.log("setS2Options EFFECT", dimensions, highlightCurrentSequence)
@@ -766,6 +768,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     sortBy,
     collapsedGroups,
     isOverviewMode,
+    window.devicePixelRatio,
     dimensions, 
     iconSize, 
     iconMarginLeft, 
@@ -822,31 +825,34 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     rowHeightsByField,
   ])
   
-  const sequenceLogos = useMemo(() => (
-    new SequenceLogos({
-      pssm: alignment?.pssm ?? [],
-      pssmSortedIndices: alignment?.pssmSortedIndices ?? [],
-      ...sequenceLogosCommonProps,
-    })
-  ), [
-    alignment?.pssm, 
-    alignment?.pssmSortedIndices,
-    sequenceLogosCommonProps,
-  ])
+  const dpr = window.devicePixelRatio
+  const capacity = 2000
+  const offscreenCanvasPool = useMemo(() => {
+    const { width, height } = sequenceLogosCommonProps
+    const pool = new ObjectPool(
+      () => (new OffscreenCanvas(width * dpr, height * dpr))
+    )
+    pool.allocate(capacity)
+    return pool
+  }, [sequenceLogosCommonProps, dpr, capacity])
 
-  const sequenceLogosGroups = useMemo(() => (
-    new SequenceLogosGroups({
-      groups: alignment?.groups ?? [],
-      ...sequenceLogosCommonProps
-    })
-  ), [
-    alignment?.groups,
-    sequenceLogosCommonProps
-  ])
+  const sequenceLogos = useSequenceLogos({
+    offscreenCanvasPool,
+    pssmOrGroups: alignment?.pssm,
+    ...sequenceLogosCommonProps,
+  })
+
+  const sequenceLogosGroups = useSequenceLogos({
+    offscreenCanvasPool,
+    pssmOrGroups: alignment?.groups,
+    ...sequenceLogosCommonProps,
+  })
+
 
   const sprites = useMemo(() => {
     return new Sprites({
       alphabet: alignment?.alphabet ?? "",
+      dpr,
       width: dimensions.residueWidth, 
       height: dimensions.rowHeight + dimensions.paddingTop + dimensions.paddingBottom, 
       font: `${dimensions.fontSize}px ${residueFontFamily}`,
@@ -860,7 +866,17 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       defaultBackgroundColor: colorTheme.background,
       isOverviewMode,
     })
-  }, [alignment?.alphabet, dimensions, residueFontFamily, colorTheme.text, colorTheme.background, alignmentColorPalette, alignmentColorMode, isOverviewMode])
+  }, [
+    alignment?.alphabet, 
+    dpr, 
+    dimensions, 
+    residueFontFamily, 
+    colorTheme.text, 
+    colorTheme.background, 
+    alignmentColorPalette, 
+    alignmentColorMode, 
+    isOverviewMode
+  ])
 
   const barSprites = useMemo(() => {
     const maxBarHeight = rowHeightsByField[`${Object.keys(SPECIAL_ROWS).indexOf("$$coverage$$")}`] - dimensions.paddingTop - dimensions.paddingBottom
@@ -984,7 +1000,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
 
     columnWidthsRef.current.isResizing = false
     columnWidthsRef.current.isGrouped = !!alignment?.groupBy
-    columnWidthsRef.current.isOverviewMode = isOverviewMode
+    columnWidthsRef.current.zoom = zoom
     if (columnWidthsRef.current.alignmentUuid !== alignment.uuid) {
       columnWidthsRef.current.alignmentUuid = alignment.uuid
       columnWidthsRef.current.fieldWidths = {}
@@ -993,7 +1009,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     for (const node of layoutResult.colLeafNodes) {
       columnWidthsRef.current.fieldWidths[node.field] = node.width
     }
-  }, [alignment?.uuid, alignment?.groupBy, isOverviewMode])
+  }, [alignment?.uuid, alignment?.groupBy, zoom])
 
   const handleDataCellHover = useCallback((data: TargetCellInfo): void => {
     if (!onMouseHover) {

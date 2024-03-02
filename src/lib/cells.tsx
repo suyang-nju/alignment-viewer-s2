@@ -9,10 +9,10 @@ import type {
 } from '@antv/s2'
 import type { IShape, Point, Event as GraphEvent } from '@antv/g-canvas'
 import type { ReactNode } from 'react'
-import type { TAlignment, TAlignmentPositionsToStyle } from './Alignment'
+import type { TAlignment, TPssm, TAlignmentPositionsToStyle } from './Alignment'
 import type { TDimensions, TContextualInfo } from '../components/AlignmentViewer'
 import type Sprites from './sprites'
-import type { SequenceLogos, SequenceLogosGroups } from './sequenceLogos'
+import type { TSequenceLogos } from './sequenceLogos'
 import type BarSprites from './BarSprites'
 
 import { isEmpty, isNil, isNumber } from 'lodash'
@@ -1415,27 +1415,33 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
       skipX: residueWidth,
     })
 
-    let barHeightRatios: number[]
+    let barHeights: number[]
+    let maxBarHeight: number
     switch (this.getMeta().fieldValue) {
       case "$$entropy$$":
-        barHeightRatios = alignment.entropy
+        barHeights = alignment.entropy
+        maxBarHeight = alignment.maxEntropy || 1
         break
       case "$$conservation$$":
-        barHeightRatios = alignment.conservation
+        barHeights = alignment.conservation
+        maxBarHeight = 1
         break
       case "$$coverage$$":
-        barHeightRatios = alignment.positionalCoverage
+        barHeights = alignment.positionalCoverage
+        maxBarHeight = 1
         break
       case "$$kl divergence$$": 
-        barHeightRatios = alignment.klDivergence
+        barHeights = alignment.klDivergence
+        maxBarHeight = alignment.maxKlDivergence || 1
         break
       default:
-        barHeightRatios = []
+        barHeights = []
+        maxBarHeight = 1
     }
 
     const img = this.backgroundShape.attr('img') as (OffscreenCanvas | ImageData | undefined)[]
     for (let i = sequencePositionStart, j = i - visibleSequencePositionStart; i <= sequencePositionEnd; ++i, ++j) {
-      img[j] = barSprites.get(barHeightRatios[i])
+      img[j] = barSprites.get(barHeights[i] / maxBarHeight)
     }
   }
 
@@ -1486,14 +1492,21 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
     const visibleSequencePositionStart = avStore.get("visibleSequencePositionStart") as number
     const alignment = avStore.get("alignment") as TAlignment
     const sequenceIndex = this.getMeta().fieldValue as string | number
-    let sequenceLogos: SequenceLogos
+    let sequenceLogos: TSequenceLogos
+    let groupIndex: number | undefined
     if (alignment.groupBy && isNumber(sequenceIndex)) {
-      const groupIndex = alignment.sequences[sequenceIndex].__groupIndex__
-      const sequenceLogosGroups = avStore.get("sequenceLogosGroups") as SequenceLogosGroups
-      sequenceLogos = sequenceLogosGroups.get(groupIndex) as SequenceLogos
+      groupIndex = alignment.sequences[sequenceIndex].__groupIndex__
+      sequenceLogos = avStore.get("sequenceLogosGroups") as TSequenceLogos
+
     } else {
-      sequenceLogos = avStore.get("sequenceLogos") as SequenceLogos
+      groupIndex = undefined
+      sequenceLogos = avStore.get("sequenceLogos") as TSequenceLogos
     }
+
+    if (!sequenceLogos) {
+      return
+    }
+
     const dimensions = avStore.get("dimensions") as TDimensions
     const { residueWidth, residueFontWidth } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
@@ -1512,8 +1525,14 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
     })
   
     const img = this.backgroundShape.attr('img') as (OffscreenCanvas | ImageData | undefined)[]
-    for (let i = sequencePositionStart, j = i - visibleSequencePositionStart; i <= sequencePositionEnd; ++i, ++j) {
-      img[j] = sequenceLogos.get(i)
+    if ((!this.renderedSequencePositionStart) || (this.renderedSequencePositionStart < sequencePositionStart)) {
+      for (let i = sequencePositionStart, j = i - visibleSequencePositionStart; i <= sequencePositionEnd; ++i, ++j) {
+        img[j] = sequenceLogos.get(i, groupIndex)
+      }  
+    } else {
+      for (let i = sequencePositionEnd, j = i - visibleSequencePositionStart; i >= sequencePositionStart; --i, --j) {
+        img[j] = sequenceLogos.get(i, groupIndex)
+      }  
     }
   }
 
@@ -1528,31 +1547,31 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
     const key = sequenceIndex
     const className = sequenceIndex
 
-    let pssm: number[], sortedIndices: number[]
+    let pssm: TPssm
     if (isNumber(sequenceIndex)) {
       const groupIndex = alignment.sequences[sequenceIndex].__groupIndex__
-      pssm = alignment.groups[groupIndex].pssm[residueIndex]
-      sortedIndices = alignment.groups[groupIndex].pssmSortedIndices[residueIndex]
+      pssm = alignment.groups[groupIndex].pssm//[residueIndex]
+      // sortedIndices = alignment.groups[groupIndex].pssmSortedIndices[residueIndex]
     } else {
-      pssm = alignment.pssm[residueIndex]
-      sortedIndices = alignment.pssmSortedIndices[residueIndex]  
+      pssm = alignment.pssm//[residueIndex]
+      // sortedIndices = alignment.pssmSortedIndices[residueIndex]
     }
 
-    if (pssm && sortedIndices) {
+    if (pssm) {
       info.content = []
       let lessThan1pct = ""
-      for (let j = sortedIndices.length - 1; j >= 0; --j) {
-        const i = sortedIndices[j]
-        if ((i === ALPHABET.length) || (pssm[i] === 0)) { // gap or not exist
+      const indexingOffset = residueIndex * pssm.numSymbols
+      for (let j = pssm.numSymbols - 1; j >= 0; --j) {
+        const i = pssm.sortedIndices[indexingOffset + j]
+        const pct = pssm.values[indexingOffset + i]
+        if ((i === pssm.numSymbols - 1) || pct < 0) { // gap or not exist
           continue
-        }
-        const pct = Math.round(pssm[i] * 100)
-        if (pct > 0) {
+        } else if (pct > 0) {
           info.content.push(
-            <div key={`${key} ${i}`} className={className}>{`${ALPHABET[i]} ${pct}%`}</div>
+            <div key={`${key} ${i}`} className={className}>{`${pssm.alphabet[i]} ${pct}%`}</div>
           )
         } else {
-          lessThan1pct += ALPHABET[i]
+          lessThan1pct += pssm.alphabet[i]
         }
       }
 

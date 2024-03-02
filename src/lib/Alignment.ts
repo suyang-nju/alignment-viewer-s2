@@ -96,11 +96,26 @@ type TBaseSequence = (typeof DEFAULT_GROUP_ANNOTATION_VALUES) & {
 }
 
 export type TSequence = TBaseSequence & Record<string, string | number>
+
+const PssmValuesArray = Int8Array
+const PssmSortedIndicesArray = Uint8Array
+const PssmTalliesArray = Uint32Array
+export type TPssmValues = Int8Array
+export type TPssmSortedIndices = Uint8Array
+type TPssmTallies = Uint32Array
+export type TPssm = {
+  alphabet: string,
+  values: TPssmValues,
+  sortedIndices: TPssmSortedIndices,
+  length: number,
+  numSymbols: number,
+}
+
 export type TSequenceGroup = {
   members: number[],
-  pssm: number[][],
-  pssmSortedIndices: number[][],
+  pssm: TPssm,
 }
+
 export type TAlignment = {
   name: string,
   uuid: string,
@@ -117,11 +132,12 @@ export type TAlignment = {
   groups: TSequenceGroup[],
   // --- per-position properties ---
   positionalCoverage: number[],
-  pssm: number[][],
-  pssmSortedIndices: number[][],
+  pssm: TPssm,
   entropy: number[],
+  maxEntropy: number,
   conservation: number[],
   klDivergence: number[],
+  maxKlDivergence: number,
 }
 
 export type TAlignmentSortParams = {
@@ -401,7 +417,7 @@ function parseAnnotationFieldsDefault(actualId: string, desc: string): {
 } {
   const annotations: Record<string, string | number> = {}
   const annotationFields: TSequenceAnnotationFields = {}
-  if (!!desc) {
+  if (desc) {
     annotations.description = desc
     annotationFields.description = {
       name: "Description",
@@ -559,11 +575,12 @@ export function createAlingmentFromSequences(name: string, sequences: TSequence[
     alphabet, 
     positionalCoverage, 
     pssm, 
-    pssmSortedIndices, 
     consensusSequence, 
     entropy, 
+    maxEntropy,
     conservation, 
     klDivergence, 
+    maxKlDivergence,
   } = calcAlignmentStats(sequences)
 
   sequences = calculateDistances(sequences, referenceSequence, consensusSequence)
@@ -595,10 +612,11 @@ export function createAlingmentFromSequences(name: string, sequences: TSequence[
     annotationFields,
     positionalCoverage,
     pssm,
-    pssmSortedIndices,
     entropy,
+    maxEntropy,
     conservation,
     klDivergence,
+    maxKlDivergence,
     groupBy: undefined,
     groups: [],
   }
@@ -623,50 +641,55 @@ export function getAlignmentAnnotationFields(alignment: TAlignment) {
   return { importedFields, derivedFields }
 }
 
-function calcPSSM(sequences: TSequence[], length: number, alphabet: string): [ number[][], number[][] ] {
-  const pssm = new Array<number[]>(length)
-  const pssmSortedIndices = new Array<number[]>(length)
-  for (let i = 0; i < length; ++i) {
-    pssm[i] = new Array<number>(alphabet.length + 1)
-    pssmSortedIndices[i] = new Array<number>(alphabet.length + 1)
-    for (let j = 0; j < pssm[i].length; ++j) {
-      pssm[i][j] = 0
-    }
-  }
+function calcPSSM(sequences: TSequence[], length: number, alphabet: string): [TPssm, TPssmTallies] {
+  const numSymbols = alphabet.length + 1
+  const pssmValues = new PssmValuesArray(numSymbols * length)
+  const pssmSortedIndices = new PssmSortedIndicesArray(pssmValues.length)
+  const tallies = new PssmTalliesArray(pssmValues.length)
+  let k = 0
 
   for (const rec of sequences) {
+    k = 0
     for (let i = 0; i < rec.sequence.length; ++i) {
       let a = alphabet.indexOf(rec.sequence[i].toUpperCase())
       if (a < 0) { // not in alphabet: gap, etc 
         a = alphabet.length
       }
-      ++pssm[i][a]
+      ++tallies[k + a]
+      k += numSymbols
     }
   }
 
-  const argsortHelper = new Array<[number, number]>(pssm[0].length)
-  for (let i = 0; i < argsortHelper.length; ++i) {
-    argsortHelper[i] = [0, 0] // index, value
-  }
-  const compareFn = (a: [number, number], b: [number, number]) => (a[1] - b[1]) // ascending
+  const argsortHelperValues = new Uint32Array(numSymbols)
+  const argsortHelperIndices = new Uint32Array(numSymbols)
+  const compareFn = (a: number, b: number) => (argsortHelperValues[a] - argsortHelperValues[b]) // ascending
+  k = 0
   for (let i = 0; i < length; ++i) {
-    for (let j = 0; j < pssm[i].length; ++j) {
-      argsortHelper[j] = [j, pssm[i][j]]
+    for (let j = 0; j <= alphabet.length; ++j) {
+      argsortHelperIndices[j] = j
+      argsortHelperValues[j] = tallies[k + j]
     }
-    argsortHelper.sort(compareFn)
-    for (let j = 0; j < pssm[i].length; ++j) {
-      pssmSortedIndices[i][j] = argsortHelper[j][0]
-    }
+    argsortHelperIndices.sort(compareFn)
+    pssmSortedIndices.set(argsortHelperIndices, k)
+    k += numSymbols
   }
 
   const depth = sequences.length
-  for (let i = 0; i < length; ++i) {
-    for (let j = 0; j < pssm[i].length; ++j) {
-      pssm[i][j] /= depth
-    }
+  for (let i = 0; i < tallies.length; ++i) {
+    // special-case true 0 as -1 because < 0.5% will be rounded to 0
+    pssmValues[i] = tallies[i] === 0 ? -1 : Math.round(tallies[i] / depth * 100)
   }
 
-  return [ pssm, pssmSortedIndices ]
+  return [
+    {
+      alphabet,
+      values: pssmValues, 
+      sortedIndices: pssmSortedIndices,
+      length,
+      numSymbols,
+    }, 
+    tallies
+  ]
 }
 
 function calcAlignmentStats(sequences: TSequence[]) {
@@ -679,80 +702,72 @@ function calcAlignmentStats(sequences: TSequence[]) {
   }
 
   const alphabet = detectAlphabet(sequences)
-  const [ pssm, pssmSortedIndices ] = calcPSSM(sequences, length, alphabet)
-  const positionalCoverage = new Array<number>(length)
-  const entropy = new Array<number>(length)
-  const conservation = new Array<number>(length)
-  const klDivergence = new Array<number>(length)
+  const [ pssm, tallies ] = calcPSSM(sequences, length, alphabet)
+  const { numSymbols } = pssm
+  let k = 0  
+
+  const q = new PssmTalliesArray(numSymbols) // for KL divergence
+  k = 0  
   for (let i = 0; i < length; ++i) {
-    positionalCoverage[i] = 0
-    entropy[i] = 0
-    klDivergence[i] = 0
+    for (let j = 0; j <= alphabet.length; ++j) {
+      q[j] += tallies[k + j]
+    }
+    k += numSymbols
   }
 
-  for (const rec of sequences) {
-    for (let i = 0; i < rec.sequence.length; ++i) {
-      let a = alphabet.indexOf(rec.sequence[i].toUpperCase())
-      if (a >= 0) { // in alphabet, not gap, etc 
-        ++positionalCoverage[i]
+
+  const positionalCoverage = new Array<number>(length)
+  const entropy = new Array<number>(length)
+  const klDivergence = new Array<number>(length)
+  let maxEntropy = 0
+  let maxKlDivergence = 0
+  k = 0
+  for (let i = 0; i < length; ++i) {
+    positionalCoverage[i] = 1.0 - (tallies[k + alphabet.length] / depth)
+    
+    entropy[i] = 0
+    klDivergence[i] = 0
+    for (let j = 0; j <= alphabet.length; ++j) {
+      if (tallies[k + j] > 0) {
+        const p = tallies[k + j] / depth
+        entropy[i] -= p * Math.log2(p)
+        if (q[j] > 0) {
+          klDivergence[i] += p * Math.log2(p / (q[j] / depth / length))
+        }
       }
+    }
+
+    if (maxEntropy < entropy[i]) {
+      maxEntropy = entropy[i]
+    }
+
+    if (maxKlDivergence < klDivergence[i]) {
+      maxKlDivergence = klDivergence[i]
+    }
+
+    k += numSymbols
+  }
+
+  const conservation = new Array<number>(length)
+  if (maxEntropy > 0) {
+    for (let i = 0; i < length; ++i) {
+      conservation[i] = 1.0 - entropy[i] / maxEntropy
+    }
+  } else {
+    for (let i = 0; i < length; ++i) {
+      conservation[i] = 1.0
     }
   }
 
   const consensus = new Array<string>(length)
+  k = alphabet.length
   for (let i = 0; i < length; ++i) {
     // TODO: what if tied?
-    const j = pssmSortedIndices[i][alphabet.length]
+    const j = pssm.sortedIndices[k]
     consensus[i] = (j == alphabet.length) ? GAP : alphabet[j]
+    k += numSymbols
   }
   const consensusSequence = createSequence("$$consensus$$", "consensus", "consensus", consensus.join(""))
-
-  let maxEntropy = 0
-  for (let i = 0; i < length; ++i) {
-    positionalCoverage[i] /= depth
-    for (let j = 0; j < pssm[i].length; ++j) {
-      if (pssm[i][j] > 0) {
-        entropy[i] -= pssm[i][j] * Math.log2(pssm[i][j])
-      }
-    }
-    if (maxEntropy < entropy[i]) {
-      maxEntropy = entropy[i]
-    }
-  }
-
-  if (maxEntropy > 0) {
-    for (let i = 0; i < length; ++i) {
-      entropy[i] /= maxEntropy
-    }  
-  }
-
-  for (let i = 0; i < length; ++i) {
-    conservation[i] = 1 - entropy[i]
-  }  
-
-  const q = new Array<number>(alphabet.length + 1) // for KL divergence
-  for (let j = 0; j < q.length; ++j) {
-    q[j] = 0
-  }
-  for (let i = 0; i < length; ++i) {
-    for (let j = 0; j < q.length; ++j) {
-      q[j] += pssm[i][j] / length
-    }
-  }
-  let maxKlDivergence = 0
-  for (let i = 0; i < length; ++i) {
-    for (let j = 0; j < q.length; ++j) {
-      if ((pssm[i][j] > 0) && (q[j] > 0)) {
-        klDivergence[i] += pssm[i][j] * Math.log(pssm[i][j] / q[j])
-      }
-    }
-    if (maxKlDivergence < klDivergence[i]) {
-      maxKlDivergence = klDivergence[i]
-    }
-  }
-  for (let i = 0; i < length; ++i) {
-    klDivergence[i] /= maxKlDivergence
-  }
 
   return {
     length, 
@@ -760,11 +775,12 @@ function calcAlignmentStats(sequences: TSequence[]) {
     alphabet, 
     positionalCoverage, 
     pssm, 
-    pssmSortedIndices, 
     consensusSequence, 
     entropy, 
+    maxEntropy,
     conservation, 
     klDivergence, 
+    maxKlDivergence,
   }
 }
 
@@ -991,16 +1007,17 @@ export function groupByField(alignment: TAlignment, groupBy?: string): TAlignmen
   }
 
   let groupIndex = -1
+  const sequencesForPssm: TSequence[] = []
   for (const members of groups.values()) {
     ++groupIndex
-    const sequencesForPssm: TSequence[] = []
     for (const sequenceIndex of members) {
       alignment.sequences[sequenceIndex].__groupIndex__ = groupIndex
       alignment.sequences[sequenceIndex].__groupSize__ = members.length
       sequencesForPssm.push(alignment.sequences[sequenceIndex])
     }
-    const [ pssm, pssmSortedIndices ] = calcPSSM(sequencesForPssm, alignment.length, alignment.alphabet)
-    alignment.groups.push({ members, pssm, pssmSortedIndices })
+    const [ pssm ] = calcPSSM(sequencesForPssm, alignment.length, alignment.alphabet)
+    alignment.groups.push({ members, pssm })
+    sequencesForPssm.length = 0
   }
 
   return alignment

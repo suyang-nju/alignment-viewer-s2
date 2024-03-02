@@ -131,7 +131,7 @@ export class AVTableSheet extends TableSheet {
       ctx.fontKerning = "none"
     }
   
-    console.log("buildFacet")
+    // console.log("buildFacet")
     this.minimapBackgroundShape?.off("mousedown")
     this.minimapShape?.off("mousedown")
     this.minimapViewportShape?.off("mousedown")
@@ -315,7 +315,7 @@ export class AVTableSheet extends TableSheet {
   }
 
   renderMinimap() {
-    console.log("render minimap")
+    // console.log("render minimap")
     const minimapImage = this.avStore.get("minimapImage") as OffscreenCanvas
     if (!minimapImage) {
       return
@@ -376,12 +376,10 @@ export class AVTableSheet extends TableSheet {
       }
     })
 
-    // const minimapViewportX = Math.round(minimapColNode.x + (minimapMaxWidth - minimapWidth) / 2)
     let minimapViewportX = minimapBackgroundX + dimensions.minimapMargin
     if (minimapViewportX > minimapX) {
       minimapViewportX = minimapX
     }
-    // const minimapViewportWidth = Math.round(Math.max(minimapMaxWidth, minimapWidth))
     const minimapViewportWidth = minimapBackgroundWidth - 2 * (minimapViewportX - minimapBackgroundX)
 
     const { height: frozenRowGroupHeight } = this.frozenRowGroup.getClip().getBBox()
@@ -512,7 +510,7 @@ export type TColumnWidths = {
   alignmentUuid: string | undefined,
   fieldWidths: Record<string, number>,
   isGrouped: boolean,
-  isOverviewMode: boolean,
+  zoom: number,
   isResizing: boolean,
 }
 
@@ -524,6 +522,7 @@ export function useS2Options(
   sortBy: TAlignmentSortParams[],
   collapsedGroups: number[],
   isOverviewMode: boolean,
+  devicePixelRatio: number,
   dimensions: TDimensions, 
   iconSize: number, 
   iconMarginLeft: number, 
@@ -669,6 +668,7 @@ export function useS2Options(
       conditions: {
         icon: iconConditions,
       },
+      devicePixelRatio,
       hdAdapter: false,
       tooltip: {
         showTooltip: false,
@@ -711,7 +711,7 @@ export function useS2Options(
         if (
           (!columnWidthsRef.current.isResizing) && 
           (alignment?.uuid === columnWidthsRef.current.alignmentUuid) &&
-          (isOverviewMode === columnWidthsRef.current.isOverviewMode)
+          (dimensions.zoom === columnWidthsRef.current.zoom)
         ) {
           const colWidth = columnWidthsRef.current.fieldWidths[colNode.field]
           if (
@@ -796,6 +796,7 @@ export function useS2Options(
     sortBy,
     collapsedGroups,
     isOverviewMode, 
+    devicePixelRatio,
     dimensions, 
     iconSize,
     iconMarginLeft,
