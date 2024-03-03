@@ -7,7 +7,7 @@ import type {
   TSequenceGroup,
 } from '../lib/Alignment'
 import type { TAlignmentColorMode } from '../lib/AlignmentColorSchema'
-import type { TAlignmentViewerToggles, TContextualInfo, TSetContextualInfo, TTargetCellAndIconInfo } from './AlignmentViewer'
+import type { TAlignmentViewerToggles, TContextualInfo, TSetContextualInfo, TAVMouseEventInfo } from './AlignmentViewer'
 import type { MouseEvent, ReactNode } from 'react'
 import type { TargetCellInfo } from '@antv/s2'
 import type { RadioChangeEvent, MenuProps } from 'antd'
@@ -132,22 +132,42 @@ const StatusBar = forwardRef(function StatusBar(props, ref) {
     setContextualInfo(info)
   }, [])
 
-  let body
-  if (!contextualInfo) {
-    body = <div>{"\xa0"}</div>
-  } else {
-    body = (
-      <>
-        {(contextualInfo.row || contextualInfo.col) && (
-          <Flex key="row-col" className="row-col">
-            {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
-            {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
-          </Flex>
-        )}
-        {contextualInfo.sequenceId && <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>}
-        {contextualInfo.content}
-      </>
-    )
+  const body: ReactNode[] = []
+  // if (!contextualInfo) {
+  //   body = <div>{"\xa0"}</div>
+  // } else {
+  //   body = (
+  //     <>
+  //       {(contextualInfo.row || contextualInfo.col) && (
+  //         <Flex key="row-col" className="row-col">
+  //           {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
+  //           {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
+  //         </Flex>
+  //       )}
+  //       {contextualInfo.sequenceId && <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>}
+  //       {contextualInfo.content}
+  //     </>
+  //   )
+  // }
+  if (contextualInfo) {
+    if (contextualInfo.row || contextualInfo.col) { 
+      body.push(
+        <Flex key="row-col" className="row-col">
+          {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
+          {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
+        </Flex>
+      )
+    }
+    
+    if (contextualInfo.sequenceId) {
+      body.push(
+        <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>
+      )
+    }
+    
+    for (const node of contextualInfo.content) {
+      body.push(node)
+    }
   }
 
   // const antdThemeToken = antdTheme.useToken().token
@@ -169,7 +189,7 @@ const StatusBar = forwardRef(function StatusBar(props, ref) {
       //   overflow: "hidden",      
       // }}
     >
-      {body}
+      {body.length ? body : "\xa0"}
     </Flex>
   )
 })
@@ -395,14 +415,14 @@ export default function Chrome() {
   const [pinnedColumns, setPinnedColumns] = useState(["id"])
   const [sortBy, _setSortBy] = useState<TAlignmentSortParams[]>([])
   const setSortBy = useStartSpinning(_setSortBy)
-  const [groupBy, _setGroupBy] = useState<string | undefined>(undefined)
+  const [groupBy, _setGroupBy] = useState<string | number | undefined>(undefined)
   const setGroupBy = useStartSpinning(_setGroupBy)
   const [groupCount, setGroupCount] = useState(0)
   const [collapsibleGroups, setCollapsibleGroups] = useState<number[]>([])
   const [collapsedGroups, _setCollapsedGroups] = useState<number[]>([])
   const setCollapsedGroups = useStartSpinning(_setCollapsedGroups)
 
-  const handleGroupBy = useCallback((by: string | undefined) => {
+  const handleGroupBy = useCallback((by: string | number | undefined) => {
     if (by === groupBy) {
       return
     }
@@ -449,7 +469,7 @@ export default function Chrome() {
     )
   }
 
-  const [contextMenuTarget, setContextMenuTarget] = useState<TargetCellInfo & {data: unknown}>()
+  const [contextMenuTarget, setContextMenuTarget] = useState<TAVMouseEventInfo>()
   const contextMenu = useMemo((): MenuProps => {
     return createContextMenu({
       isOverviewMode,
@@ -663,8 +683,8 @@ export default function Chrome() {
               <>
                 <ActionMenuButton menu={showHideColumnsMenu}>Show / Hide</ActionMenuButton>
                 <ActionMenuButton menu={sortMenu} checked={sortBy.length > 0}>Sort</ActionMenuButton>
-                <ActionMenuButton menu={groupMenu} checked={!!groupBy}>
-                  {groupBy ? `${groupCount} Groups` : "Group"}
+                <ActionMenuButton menu={groupMenu} checked={groupBy !== undefined}>
+                  {groupBy === undefined ? "Group" : `${groupCount} Groups`}
                 </ActionMenuButton>
               </> 
             ) : null

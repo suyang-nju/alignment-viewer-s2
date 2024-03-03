@@ -10,13 +10,12 @@ import type {
 import type { IShape, Point, Event as GraphEvent } from '@antv/g-canvas'
 import type { ReactNode } from 'react'
 import type { TAlignment, TPssm, TAlignmentPositionsToStyle } from './Alignment'
-import type { TDimensions, TContextualInfo } from '../components/AlignmentViewer'
+import type { TDimensions, TContextualInfo, TAVMouseEventInfo } from '../components/AlignmentViewer'
 import type Sprites from './sprites'
 import type { TSequenceLogos } from './sequenceLogos'
 import type BarSprites from './BarSprites'
 
 import { isEmpty, isNil, isNumber } from 'lodash'
-import { lighten } from 'color2k'
 import {
   TableSeriesCell, 
   TableDataCell, 
@@ -25,16 +24,17 @@ import {
   CellBorderPosition, 
   renderIcon, 
   renderLine,
-  InteractionStateName
+  InteractionStateName,
+  CellTypes,
 } from '@antv/s2'
 import { Shape } from '@antv/g-canvas'
 
 import { AVTableSheet, SPECIAL_ROWS } from './AVTableSheet'
-import { AA1to3, ALPHABET, formatSequence } from './Alignment'
+import { formatSequence } from './Alignment'
 import { ShapeBaseSupportingOffscreenCanvas } from './OffscreenCanvas'
 
 type TConstructor = new (...args: any[]) => {}
-function withEvents<TBase extends TConstructor>(Base: TBase) {
+function withEvents(Base: TConstructor) {
   return class BaseWithEvents extends Base {
     public drawConditionIconShapes(): void {
       const avStore = (this.spreadsheet as AVTableSheet).avStore
@@ -81,23 +81,28 @@ function withEvents<TBase extends TConstructor>(Base: TBase) {
       const dimensions = avStore.get("dimensions") as TDimensions
       const { scrollX = 0, scrollY = 0 } = spreadsheet.facet.getScrollOffset()
 
-      let sequenceIndex: number | string
+      let sequenceIndex: number | string | undefined
       let row: number | undefined
       if ((viewMeta.valueField === "__sequenceIndex__") && (viewMeta.fieldValue === "$$overview$$")) {
         row = Math.floor((event.y - viewMeta.spreadsheet.facet.columnHeader.getBBox().height + scrollY - viewMeta.y) / dimensions.residueHeight)
         sequenceIndex = sortedDisplayedIndices[row]
         ++row // adjust to 1-based
       } else {
-        row = viewMeta.rowIndex - firstSequenceRowIndex + 1 // 1-based
-        if (row <= 0) {
+        if (target.cellType === CellTypes.DATA_CELL) {
+          row = viewMeta.rowIndex - firstSequenceRowIndex + 1 // 1-based
+          if (row <= 0) {
+            row = undefined
+          }
+  
+          sequenceIndex = spreadsheet.dataSet.getCellData({
+            query: {
+              rowIndex: viewMeta.rowIndex
+            }
+          }).__sequenceIndex__  
+        } else {
+          sequenceIndex = undefined
           row = undefined
         }
-
-        sequenceIndex = spreadsheet.dataSet.getCellData({
-          query: {
-            rowIndex: viewMeta.rowIndex
-          }
-        }).__sequenceIndex__
       }
 
       let restOfGroup: number | undefined = undefined
@@ -109,7 +114,7 @@ function withEvents<TBase extends TConstructor>(Base: TBase) {
         }
       }
 
-      let sequenceId
+      let sequenceId: string | undefined = undefined
       if (sequenceIndex === "$$reference$$") {
         sequenceId = alignment.referenceSequence?.id
       } else if (sequenceIndex === "$$consensus$$") {
@@ -126,7 +131,7 @@ function withEvents<TBase extends TConstructor>(Base: TBase) {
       // const scrollX = panelScrollGroupClipBBox.x - frozenColGroupWidth
       let residueIndex: number | undefined, col: number | undefined
       let anchorX, anchorWidth
-      if (viewMeta.valueField === "__sequenceIndex__") {
+      if ((viewMeta.valueField === "__sequenceIndex__") || (viewMeta.field === "__sequenceIndex__")) {
         residueIndex = Math.floor((event.x + scrollX - viewMeta.x) / dimensions.residueWidth)
         col = residueIndex + 1  
         anchorX = viewMeta.x + residueIndex * dimensions.residueWidth
@@ -161,7 +166,7 @@ function withEvents<TBase extends TConstructor>(Base: TBase) {
       }
       anchorY += event.clientY - event.y + dimensions.colHeight
   
-      let content: ReactNode[] = []
+      const content: ReactNode[] = []
       if (!isNil(viewMeta.fieldValue)) {
         const fieldName = alignment.annotationFields[viewMeta.valueField]?.name
         let fieldContent = `${viewMeta.fieldValue}`
@@ -186,7 +191,7 @@ function withEvents<TBase extends TConstructor>(Base: TBase) {
       }
     }
   
-    onClick(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta, iconName?: string) {
+    onClick(info: TAVMouseEventInfo) {
       // implemented in subclasses
     }
   }
@@ -196,8 +201,8 @@ const TableColCellWithEvents = withEvents(TableColCell)
 const TableSeriesCellWithEvents = withEvents(TableSeriesCell)
 const TableDataCellWithEvents = withEvents(TableDataCell)
 
-function withSequence<TBase extends BaseCell & TConstructor>(Base: TBase) {
-  return class BaseWithEvents extends Base {
+function withSequence<TBase extends typeof BaseCell<ViewMeta>>(Base: TBase) {
+  return class BaseWithSequence extends Base {
     renderedSequencePositionStart: number | undefined = undefined
     renderedSequencePositionEnd: number | undefined = undefined
     renderingHeight = 0
@@ -560,18 +565,57 @@ export class SequenceSeriesColCell extends TableColCellWithEvents {
 }
 
 
-export class SequenceColCell extends TableColCell {
-  // protected drawInteractiveBgShape(): void {}
+export class SequenceColCell extends TableColCellWithEventsAndSequence/*TableColCell*/ {
+  groupByIndicatorShape?: IShape
 
-  protected drawTextShape(): void {}
+  // protected drawInteractiveBgShape(): void {}
+  // protected drawTextShape(): void {}
+
+  protected drawGroupByIndicatorShape(): void {
+    const avStore = (this.spreadsheet as AVTableSheet).avStore
+    const alignment = avStore.get("alignment") as TAlignment
+    const groupBy = alignment.groupBy
+    if (!isNumber(groupBy)) {
+      return
+    }
+
+    const visibleSequencePositionStart = avStore.get("visibleSequencePositionStart") as number
+    const visibleSequencePositionEnd = avStore.get("visibleSequencePositionEnd") as number
+    if ((groupBy < visibleSequencePositionStart) || (groupBy > visibleSequencePositionEnd)) {
+      this.groupByIndicatorShape?.set("visible", false)
+      return
+    }
+
+    const dimensions = avStore.get("dimensions") as TDimensions
+    const { residueWidth } = dimensions
+    const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
+    const lineWidth = 1
+    if (!this.groupByIndicatorShape) {
+      this.groupByIndicatorShape = this.addShape("rect", {
+        attrs: {
+          x: cellX + groupBy * residueWidth, 
+          y: cellY + lineWidth/2, 
+          width: residueWidth,
+          height: cellHeight - lineWidth,
+          stroke: this.theme.colCell?.text?.fill,
+          lineWidth,
+        }
+      })
+    } else {
+      this.groupByIndicatorShape.attr({
+        x: cellX + groupBy * residueWidth, 
+      })
+      this.groupByIndicatorShape.set("visible", true)
+    }
+  }
 
   // protected drawBorders(): void {
   //   return
   // }
 
-  protected drawVerticalBorder(dir: CellBorderPosition): void {
-    return
-  }
+  // protected drawVerticalBorder(dir: CellBorderPosition): void {
+  //   return
+  // }
 
   /*
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {
@@ -627,7 +671,31 @@ export class SequenceColCell extends TableColCell {
 
     const visibleSequencePositionStart = avStore.get("visibleSequencePositionStart") as number
     const visibleSequencePositionEnd = avStore.get("visibleSequencePositionEnd") as number
+    const dimensions = avStore.get("dimensions") as TDimensions
+    const { residueWidth } = dimensions
+    const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
+
+    if (!this.backgroundShape) {
+      const { backgroundColor, backgroundColorOpacity } = this.getBackgroundColor()
+      this.backgroundShape = this.addShape('rect', {
+        attrs: {
+          x: cellX + visibleSequencePositionStart * residueWidth,
+          y: cellY,
+          width: residueWidth * (visibleSequencePositionEnd - visibleSequencePositionStart + 1),
+          height: cellHeight,
+          fill: backgroundColor,
+          fillOpacity: backgroundColorOpacity,
+        }
+      })
+    } else {
+      this.backgroundShape.attr({
+        x: cellX + visibleSequencePositionStart * residueWidth,
+        width: residueWidth * (visibleSequencePositionEnd - visibleSequencePositionStart + 1),
+      })
+    }
+
     this.drawSpecificContent(visibleSequencePositionStart, visibleSequencePositionEnd)
+    this.drawGroupByIndicatorShape()
   }
 
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {
@@ -896,7 +964,7 @@ export class SequenceIdDataCell extends TextDataCell {
     const avStore = spreadsheet.avStore
     const alignment = avStore.get("alignment") as TAlignment
 
-    if (!!!alignment) {
+    if (!alignment) {
       return { formattedValue, value }
     }
     
@@ -1029,8 +1097,10 @@ export class SequenceIdDataCell extends TextDataCell {
     return info
   }
 
-  onClick(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta, iconName?: string) {
-    if (true || !!iconName) {
+  onClick(info: TAVMouseEventInfo) {
+    console.log(info)
+    const { iconName } = info
+    if (true || iconName) {
       let { __sequenceIndex__, __links__ } = this.spreadsheet.dataSet.getCellData({
         query: {
           rowIndex: this.getMeta().rowIndex
@@ -1254,7 +1324,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
     const avStore = spreadsheet.avStore
     const alignment = avStore.get("alignment") as TAlignment
 
-    let info: TContextualInfo | undefined = super.getContextualInfo(event, target, viewMeta, iconName)
+    const info: TContextualInfo | undefined = super.getContextualInfo(event, target, viewMeta, iconName)
     info.content = []
     const residueIndex = info.residueIndex as number
     const sequenceIndex = info.sequenceIndex
@@ -1268,9 +1338,9 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
       sequence = alignment.sequences[sequenceIndex as number]
     }
     
-    if (!!sequence) {
-      let residue = sequence.sequence[residueIndex]
-      if (!!residue) {
+    if (sequence) {
+      const residue = sequence.sequence[residueIndex]
+      if (residue) {
         // residue = AA1to3[residue.toUpperCase()] ?? residue
 
         let residueNumber: number | string
@@ -1478,6 +1548,9 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
     let text = SPECIAL_ROWS[sequenceIndex].label
     if (!isNil(value)) {
       text += ": " + value.toFixed(digits)
+    }
+    if (sequenceIndex === "$$coverage$$") {
+      text += "%"
     }
 
     info.content = [<div key={key} className={className}>{text}</div>]

@@ -48,7 +48,7 @@ import { spawn, Thread, Worker } from 'threads'
 import { isNil, countBy, sortBy, range } from 'lodash'
 
 import { useRef, useMemo, useState, useEffect, useCallback, } from 'react'
-import { Node as S2Node, generateId, GuiIcon, SERIES_NUMBER_FIELD,  } from '@antv/s2'
+import { Node as S2Node, generateId, GuiIcon, SERIES_NUMBER_FIELD, CellTypes } from '@antv/s2'
 import { setLang, extendLocale } from '@antv/s2'
 import { SheetComponent } from '@antv/s2-react'
 import '@antv/s2-react/dist/style.min.css'
@@ -118,6 +118,14 @@ export type TContextualInfo = {
 }
 export type TSetContextualInfo = (info?: TContextualInfo) => void
 
+export type TAVMouseEventInfo = {
+  event: CanvasEvent, 
+  target: S2CellType<ViewMeta>, 
+  viewMeta: ViewMeta | S2Node, 
+  iconName: string | undefined,
+  contextualInfo?: TContextualInfo,
+}
+
 export type TDimensions = {
   zoom: number,
   fontFamily: string,
@@ -154,7 +162,7 @@ export type TAlignmentViewerProps = {
   showColumns?: string[],
   pinnedColumns?: string[],
   sortBy?: TAlignmentSortParams[],
-  groupBy?: string,
+  groupBy?: string | number,
   collapsedGroups?: number[],
   zoom?: number,
   isOverviewMode?: boolean,
@@ -172,7 +180,7 @@ export type TAlignmentViewerProps = {
   onSortActionIconClick?: (field: string) => void,
   onExpandCollapseGroupIconClick?: (groupIndex: number) => void,
   onExpandCollapseAllGroupsIconClick?: () => void,
-  onContextMenu?: (data: TargetCellInfo & {data: unknown}) => void,
+  onContextMenu?: (info: TAVMouseEventInfo) => void,
   onBusy?: (isBusy: boolean) => void,
   onGroupsChanged?: (groups: TSequenceGroup[]) => void,
 }
@@ -364,14 +372,7 @@ function useDimensions(
   }, [zoom, isOverviewMode, alignment?.alphabet, alignment?.depth, alignment?.length, fontFamily, residueFontFamily])
 }
 
-export type TTargetCellAndIconInfo = {
-  event: CanvasEvent, 
-  target: S2CellType<ViewMeta>, 
-  viewMeta: ViewMeta | S2Node, 
-  iconName: string | undefined,
-}
-
-function getTargetCellInfo(data: TargetCellInfo): TTargetCellAndIconInfo {
+function getAVMouseEventInfo(data: TargetCellInfo): TAVMouseEventInfo {
   let event: CanvasEvent
   let target: S2CellType<ViewMeta>
   let viewMeta: ViewMeta | S2Node
@@ -384,7 +385,9 @@ function getTargetCellInfo(data: TargetCellInfo): TTargetCellAndIconInfo {
   } else {
     ({ event, target, viewMeta } = data)
   }
-  return { event, target, viewMeta, iconName }
+  const contextualInfo: TContextualInfo = target?.getContextualInfo?.(event, target, viewMeta, iconName)
+
+  return { event, target, viewMeta, iconName, contextualInfo }
 }
 
 export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerProps) {
@@ -753,7 +756,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   const columnWidthsRef = useRef<TColumnWidths>({
     alignmentUuid: alignment?.uuid,
     fieldWidths: {},
-    isGrouped: !!(alignment?.groupBy),
+    isGrouped: (alignment?.groupBy !== undefined),
     isResizing: false,
     zoom,
   })
@@ -958,14 +961,14 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   //   // forceUpdate({})
   // }, [s2Ref, updateAVStore, forceUpdate])
 
-  const handleCellIconClick = useCallback(({ event, target, viewMeta, iconName }: TTargetCellAndIconInfo) => {
+  const handleCellIconClick = useCallback(({ event, target, viewMeta, iconName }: TAVMouseEventInfo) => {
     if (!alignment?.sequences) {
       return
     }
 
-    if ((target.cellType === "colCell") && (viewMeta.field === SERIES_NUMBER_FIELD)) {
+    if ((target.cellType === CellTypes.COL_CELL) && (viewMeta.field === SERIES_NUMBER_FIELD)) {
       onExpandCollapseAllGroupsIconClick?.()
-    } else if ((target.cellType === "rowCell") && (viewMeta.valueField === SERIES_NUMBER_FIELD)) {
+    } else if ((target.cellType === CellTypes.ROW_CELL) && (viewMeta.valueField === SERIES_NUMBER_FIELD)) {
       const i = viewMeta.rowIndex - firstSequenceRowIndex
       if (i < 0) {
         return
@@ -999,7 +1002,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     }
 
     columnWidthsRef.current.isResizing = false
-    columnWidthsRef.current.isGrouped = !!alignment?.groupBy
+    columnWidthsRef.current.isGrouped = (alignment?.groupBy !== undefined)
     columnWidthsRef.current.zoom = zoom
     if (columnWidthsRef.current.alignmentUuid !== alignment.uuid) {
       columnWidthsRef.current.alignmentUuid = alignment.uuid
@@ -1015,12 +1018,8 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     if (!onMouseHover) {
       return
     }
-    const { event, target, viewMeta, iconName } = getTargetCellInfo(data)
-    let info = target.getContextualInfo?.(event, target, viewMeta, iconName)
-    if (isNil(info.sequenceId) && (info.content.length === 0)) {
-      info = undefined
-    }
-    onMouseHover(info)
+    const { contextualInfo } = getAVMouseEventInfo(data)
+    onMouseHover(contextualInfo)
   }, [onMouseHover])
 
   const handleNoContextualInfo = useCallback(() => {
@@ -1035,8 +1034,8 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     // console.log('panelScrollGroup', s2Ref.current.panelScrollGroup.getBBox())
     // console.log('panelScrollGroup clip', s2Ref.current.panelScrollGroup.getClip().getBBox())
 
-    const { event, target, viewMeta, iconName } = getTargetCellInfo(data)
-    target.onClick?.(event, target, viewMeta, iconName)
+    const info = getAVMouseEventInfo(data)
+    info.target.onClick?.(info)
     // console.log("data clicked")
   }, [])
 
@@ -1045,18 +1044,18 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   const targetRowCellWhenMouseDownRef = useRef<S2CellType | null>(null)
   
   const handleRowCellMouseDown = useCallback((data: TargetCellInfo): void => {
-    const { event, target, viewMeta, iconName } = getTargetCellInfo(data)
+    const { target, iconName } = getAVMouseEventInfo(data)
     if (iconName) {
       targetRowCellWhenMouseDownRef.current = target
     }
   }, [targetRowCellWhenMouseDownRef])
 
   const handleRowCellMouseUp = useCallback((data: TargetCellInfo): void => {
-    const { event, target, viewMeta, iconName } = getTargetCellInfo(data)
-    if (iconName && (target === targetRowCellWhenMouseDownRef.current)) {
+    const info = getAVMouseEventInfo(data)
+    if (info.iconName && (info.target === targetRowCellWhenMouseDownRef.current)) {
       // handleRowCellClick(data)
       targetRowCellWhenMouseDownRef.current = null
-      handleCellIconClick({ event, target, viewMeta, iconName })
+      handleCellIconClick(info)
     }
   }, [handleCellIconClick])
 
@@ -1070,25 +1069,34 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     // getTargetCellInfo(event)
     const target = s2Ref.current?.getCell(event.target) as S2CellType
     const viewMeta = target?.getMeta() as S2Node
-    let data
-    if ((viewMeta?.valueField === "__sequenceIndex__") && (viewMeta?.fieldValue === "$$overview$$")) {
-      // console.log(event.y, scrollY, viewMeta.y, dimensions.colHeight)
-      const facet = s2Ref.current?.facet
-      if (facet) {
-        const { scrollX = 0, scrollY = 0 } = facet.getScrollOffset()
-        const row = Math.floor((event.y - facet?.columnHeader.getBBox().height + scrollY - viewMeta.y) / dimensions.residueHeight)
-        const sequenceIndex = sortedDisplayedIndices[row]
-        data = alignment.sequences[sequenceIndex]
-      }
-    } else {
-      data = s2Ref.current?.dataSet.getCellData({
-        query: {
-          rowIndex: viewMeta?.rowIndex
-        }
-      })  
-    }
-    onContextMenu?.({event, target, viewMeta, data})
-  }, [s2Ref, alignment?.sequences, dimensions, sortedDisplayedIndices, onContextMenu])
+    const info = getAVMouseEventInfo({ event, target, viewMeta })
+    // const contextualInfo = info.contextualInfo
+    // const data = alignment.sequences[contextualInfo?.sequenceIndex]
+
+    // if ((viewMeta?.valueField === "__sequenceIndex__") && (viewMeta?.fieldValue === "$$overview$$")) {
+    //   // console.log(event.y, scrollY, viewMeta.y, dimensions.colHeight)
+    //   const facet = s2Ref.current?.facet
+    //   if (facet) {
+    //     const { scrollX = 0, scrollY = 0 } = facet.getScrollOffset()
+    //     const row = Math.floor((event.y - facet?.columnHeader.getBBox().height + scrollY - viewMeta.y) / dimensions.residueHeight)
+    //     const sequenceIndex = sortedDisplayedIndices[row]
+    //     data = alignment.sequences[sequenceIndex]
+    //   }
+    // } else {
+    //   data = s2Ref.current?.dataSet.getCellData({
+    //     query: {
+    //       rowIndex: viewMeta?.rowIndex
+    //     }
+    //   })  
+    // }
+    onContextMenu?.(info)
+  }, [
+    s2Ref, 
+    alignment?.sequences, 
+    // dimensions, 
+    // sortedDisplayedIndices, 
+    onContextMenu
+  ])
 
   const handleSelected = useCallback((cells: S2CellType[]) => {
     s2Ref.current?.interaction.reset()
@@ -1150,7 +1158,8 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
         onRowCellHover={handleNoContextualInfo}
         onColCellMouseDown={handleRowCellMouseDown}
         onColCellMouseUp={handleRowCellMouseUp}
-        onColCellHover={handleNoContextualInfo}
+        // onColCellHover={handleNoContextualInfo}
+        onColCellHover={handleDataCellHover}
         onContextMenu={handleContextMenu}
         onDataCellHover={handleDataCellHover}
         onCornerCellHover={handleNoContextualInfo}

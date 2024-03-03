@@ -1,4 +1,4 @@
-import { range } from 'lodash'
+import { isNumber, range } from 'lodash'
 import getBlosum62Score from './blosum62'
 
 export const AA1to3 = {
@@ -128,7 +128,7 @@ export type TAlignment = {
   referenceSequenceIndex: number,
   referenceSequence: TSequence,
   annotationFields: TSequenceAnnotationFields,
-  groupBy: string | undefined,
+  groupBy: string | number | undefined,
   groups: TSequenceGroup[],
   // --- per-position properties ---
   positionalCoverage: number[],
@@ -916,7 +916,7 @@ export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortPara
   }
 
   let actualSortBy: TAlignmentSortParams[]
-  if (alignment.groupBy) {
+  if (alignment.groupBy !== undefined) {
     const groupSortBy: TAlignmentSortParams[] = []
     const otherSortBy: TAlignmentSortParams[] = []
     let sortByGroupIndex = false
@@ -984,7 +984,7 @@ export function setReferenceSequence(alignment: TAlignment, referenceSequenceInd
   return alignment
 }
 
-export function groupByField(alignment: TAlignment, groupBy?: string): TAlignment {
+export function groupByField(alignment: TAlignment, groupBy?: string | number): TAlignment {
   alignment.groupBy = groupBy
   alignment.groups = []
   if (groupBy === undefined) {
@@ -998,7 +998,7 @@ export function groupByField(alignment: TAlignment, groupBy?: string): TAlignmen
 
   const groups = new Map<string | number, number[]>()
   for (const rec of alignment.sequences) {
-    const groupKey = rec[groupBy]
+    const groupKey = isNumber(groupBy) ? rec.sequence[groupBy] : rec[groupBy]
     if (groups.has(groupKey)) {
       groups.get(groupKey)?.push(rec.__sequenceIndex__ as number)
     } else {
