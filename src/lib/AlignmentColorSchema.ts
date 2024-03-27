@@ -1,15 +1,11 @@
+import type {
+  TColorEntry,
+  TAlignmentColorPalette,
+} from './types'
+
+import { ALIGNMENT_COLOR_MODES } from './constants'
+
 import { lighten, parseToRgba } from "color2k"
-
-type TAlignmentColorMode = (typeof alignmentColorModes)[number]
-
-const alignmentColorModes = ["Light", "Dark", "Letter Only"] as const
-
-export type TColorEntry = {
-  color: string, 
-  rgba: number[],
-}
-
-export type TAlignmentColorPalette = Record<"Dark" | "Light", Map<string, TColorEntry>>
 
 const alignmentColorSchema: Record<string, TAlignmentColorPalette> = {}
 
@@ -409,5 +405,4 @@ addScheme("Purine/Pyrimidine", {
   Y: "#40e0d0",
 })
 
-export { alignmentColorModes, alignmentColorSchema }
-export type { TAlignmentColorMode }
+export { alignmentColorSchema }

@@ -5,7 +5,7 @@ body {
   box-sizing: border-box;
   /* height: 100vh;
   max-height: 100vh; */
-  /* overflow: hidden; */
+  overflow: hidden;
   padding: 0;
   margin: 0;
   font-variant-numeric: tabular-nums;
@@ -32,6 +32,13 @@ body {
   width: 100%;
 }
 
+.settings-toggles-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: calc(3 * var(--ant-padding));
+  row-gap: var(--ant-padding);
+}
+
 .input-number-with-plus-minus .ant-input-number-input {
   text-align: center;
 }
@@ -52,8 +59,9 @@ body {
   left: 0;
   right: 0;
   background-color: var(--ant-layout-body-bg);
-  opacity: 0.25;
-  pointer-events: none;
+  opacity: 0.5;
+  /* mask-image: radial-gradient(circle at center, rgba(0 0 0 / 100%) 0, rgba(0 0 0 / 25%) 100%); */
+  /* pointer-events: none; */
 }
 
 .av-wrapper {
@@ -172,4 +180,32 @@ body {
   mask-repeat: no-repeat;
   background-color: #e2e2e2;
   padding: 0px 12px 0px 4px;
+}
+
+.css-var-r1 {
+  --busy-animation-bg-height: var(--ant-control-height);
+  --busy-animation-bg-width: calc(var(--busy-animation-bg-height) * 2 / sqrt(3));
+  --busy-animation-color-1: color-mix(in srgb, var(--ant-color-bg-container) 50%, var(--ant-color-primary));
+  --busy-animation-color-2: color-mix(in srgb, var(--ant-color-bg-container) 70%, var(--ant-color-primary));
+}
+
+@keyframes busy-animation {
+  to {
+    background-position: var(--busy-animation-bg-width) 50%;
+  }
+}
+
+.busy-animation {
+  background-image: linear-gradient(-60deg, var(--busy-animation-color-1) 0%, var(--busy-animation-color-1) 33.3%, var(--busy-animation-color-2) 33.3%, var(--busy-animation-color-2) 66.7%, var(--busy-animation-color-1) 66.7%);
+  background-size: var(--busy-animation-bg-width) var(--busy-animation-bg-height);
+  background-origin: border-box;
+  animation: 1s linear infinite busy-animation;
+}
+
+.busy-indicator {
+  height: var(--ant-control-height);
+  border-radius: var(--ant-border-radius);
+  border-color: var(--color-border);
+  border-width: var(--ant-line-width);
+  background-color: var(--ant-color-bg-layout);
 }

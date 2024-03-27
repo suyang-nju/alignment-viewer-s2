@@ -1,26 +1,32 @@
 import type {
   TAlignment, 
-  TFormattedSequences, 
   TAlignmentPositionsToStyle, 
   TAlignmentSortParams, 
-  TSequence,
   TSequenceGroup,
-} from '../lib/Alignment'
-import type { TAlignmentColorMode } from '../lib/AlignmentColorSchema'
-import type { TAlignmentViewerToggles, TContextualInfo, TSetContextualInfo, TAVMouseEventInfo } from './AlignmentViewer'
+  TAlignmentColorMode,
+  TAlignmentViewerToggles, 
+  TContextualInfo, 
+  TSetContextualInfo, 
+  TAVMouseEventInfo,
+} from '../lib/types'
 import type { MouseEvent, ReactNode } from 'react'
-import type { TargetCellInfo } from '@antv/s2'
 import type { RadioChangeEvent, MenuProps } from 'antd'
 
+import {
+  ALIGNMENT_COLOR_MODES,
+  OVERVIEW_MODE_ZOOM,
+} from '../lib/constants'
 import { defaultTheme, darkTheme } from '../theme/themeConfig'
-import { alignmentColorModes, alignmentColorSchema } from '../lib/AlignmentColorSchema'
-import { getAlignmentAnnotationFields } from '../lib/Alignment'
+import { alignmentColorSchema } from '../lib/AlignmentColorSchema'
+import { getAlignmentAnnotationFields } from '../lib/alignment'
 import { defaultAlignmentViewerToggles, } from './AlignmentViewer'
-import { OVERVIEW_MODE_ZOOM } from '../lib/AVTableSheet'
 import AlignmentViewerAntdWrapper from './AlignmentViewerAntdWrapper'
 import Settings from './Settings'
 import Welcome from './Welcome'
 import ActionMenuButton from './ActionMenuButton'
+import ArrangeColumns from './ArrangeColumns'
+import SortByColumns from './SortByColumns'
+import ImportAnnotations from './ImportAnnotations'
 import { createContextMenu, createSortMenu, createGroupByMenu, createShowHideColumnsMenu } from '../lib/menu'
 
 import { debounce, isString } from 'lodash'
@@ -37,57 +43,10 @@ import clsx from 'clsx'
 import { spawn, Thread, Worker } from 'threads'
 // const { spawn, Thread, Worker } = require('threads')
 
-const getKeys = Object.keys as <T extends object>(obj: T) => Array<keyof T>
 
-function generateRawData(row: {level1: number, level2: number}, col: {level3: number, level4: number}) {
-  const res = []
-
-  const rowKeys = getKeys(row)
-  const colKeys = getKeys(col)
-
-  let sn = 0
-  for (let i = 0; i < row[rowKeys[0]]; i++) {
-    for (let j = 0; j < row[rowKeys[1]]; j++) {
-      for (let m = 0; m < col[colKeys[0]]; m++) {
-        for (let n = 0; n < col[colKeys[1]]; n++) {
-          ++sn
-          res.push({
-            id: `${sn}`,
-            actualId: `${sn}`,
-            level1: `level1:${i}`,
-            level2: `level2:${j}`,
-            level3: `level3:${m}`,
-            level4: `level4:${n}`,
-            sequence: "ACDEFGHIKLMNPQRSTVWY-"[sn % 21].repeat(15),
-            links: []
-          })
-        }
-      }
-    }
-  }
-
-  return res
-}
-
-const randomAlignment = /*new Alignment("random", */generateRawData(
-  { level1: 100, level2: 10 },
-  { level3: 100, level4: 10 },
-)/*)*/
-
-async function fetcher(fileOrUrl?:File | string) {
-  if (fileOrUrl === "random") {
-    return new Promise((resolve) => resolve(new Alignment("random", randomAlignment)))
-  } else {
-    let text: string
-    if (isString(fileOrUrl)) {
-      const response = await fetch(fileOrUrl)
-      text = await response.text()
-    } else {
-      // await new Promise((resolve) => setTimeout(resolve, 5000))
-      text = await fileOrUrl.text()
-    }
-    return new Promise((resolve) => resolve(Alignment.fromText(fileOrUrl?.name || "", text)))  
-  }
+// eslint-disable-next-line  @typescript-eslint/no-explicit-any
+function BusyIndicator(props: Record<string, any>) {
+  return <div className='busy-indicator busy-animation' {...props} />
 }
 
 async function localFetcher(fileOrUrl?:File | string) {
@@ -103,7 +62,7 @@ async function localFetcher(fileOrUrl?:File | string) {
 
 function useAlignment(file?: File | string) {
   // console.log("Begin fetching in useAlignment", Date.now())
-  let { data: alignment, error, isLoading, mutate } = useSWR(
+  let { data: alignment, error, isLoading } = useSWR(
     file, 
     localFetcher/*fetcher*/, 
     {
@@ -122,33 +81,17 @@ function useAlignment(file?: File | string) {
     }
   }
   // console.log("Done fetching in useAlignment", isLoading, error, typeof alignment, Date.now())
-  return { alignment, error, isLoading, mutate }
+  return { alignment, error, isLoading }
 }
 
 const StatusBar = forwardRef(function StatusBar(props, ref) {
   const [contextualInfo, setContextualInfo] = useState<TContextualInfo | undefined>(undefined)
 
-  useImperativeHandle(ref, () => (info?: TContextualInfo) => {
-    setContextualInfo(info)
+  useImperativeHandle(ref, () => (info?: TAVMouseEventInfo) => {
+    setContextualInfo(info?.contextualInfo)
   }, [])
 
   const body: ReactNode[] = []
-  // if (!contextualInfo) {
-  //   body = <div>{"\xa0"}</div>
-  // } else {
-  //   body = (
-  //     <>
-  //       {(contextualInfo.row || contextualInfo.col) && (
-  //         <Flex key="row-col" className="row-col">
-  //           {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
-  //           {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
-  //         </Flex>
-  //       )}
-  //       {contextualInfo.sequenceId && <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>}
-  //       {contextualInfo.content}
-  //     </>
-  //   )
-  // }
   if (contextualInfo) {
     if (contextualInfo.row || contextualInfo.col) { 
       body.push(
@@ -175,19 +118,8 @@ const StatusBar = forwardRef(function StatusBar(props, ref) {
   return (
     <Flex 
       className={clsx("status-bar", className)} 
-      // className={className}
       gap="small"
       {...otherProps} 
-      // style={{
-      //   fontSize: "12px",
-      //   padding: antdThemeToken.paddingXXS,
-      //   color: antdThemeToken.colorText, // #565C64,
-      //   // backgroundColor: `#f0f0f0`,
-      //   borderTop: `${antdThemeToken.colorBorder} 1px solid`,
-      //   textOverflow: "ellipsis",
-      //   textWrap: "nowrap",
-      //   overflow: "hidden",      
-      // }}
     >
       {body.length ? body : "\xa0"}
     </Flex>
@@ -198,8 +130,8 @@ const ContextualInfoTooltip = forwardRef(function ContextualInfoTooltip(props, r
   const [contextualInfo, setContextualInfo] = useState<TContextualInfo | undefined>(undefined)
   const timeoutRef = useRef(0)
 
-  useImperativeHandle(ref, () => debounce((info?: TContextualInfo) => {
-    setContextualInfo(info)
+  useImperativeHandle(ref, () => debounce((info?: TAVMouseEventInfo) => {
+    setContextualInfo(info?.contextualInfo)
   }, 100, {leading: false, trailing: true}), [])
 
   if (timeoutRef.current) {
@@ -227,22 +159,7 @@ const ContextualInfoTooltip = forwardRef(function ContextualInfoTooltip(props, r
         </div>
       </>
     )
-    // let body = (
-    //   <>
-    //     <div className="contextual-info-tooltip-header">
-    //       {(contextualInfo.row || contextualInfo.col) && (
-    //         <div key="row-col" className="row-col">
-    //           {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
-    //           {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
-    //         </div>
-    //       )}
-    //     </div>
-    //     {contextualInfo.sequenceId && <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>}
-    //     <div className="contextual-info-tooltip-body">
-    //       {contextualInfo.content}
-    //     </div>
-    //   </>
-    // )
+
     const { className, ...otherProps } = props
     return (
       <Tooltip 
@@ -307,10 +224,12 @@ export default function Chrome() {
   }, [])
 
   const startSpinning = useCallback(() => {
-    changeSpinning("start", 50)
+    // console.log("star spinning")
+    changeSpinning("start", 100)
   }, [changeSpinning])
 
   const stopSpinning = useCallback(() => {
+    // console.log("stop spinning")
     changeSpinning("stop", 200)
   }, [changeSpinning])
 
@@ -326,15 +245,33 @@ export default function Chrome() {
 
   const settingsRef = useRef<{ open: () => void, close: () => void }>(null)
   const setContextualInfoRef = useRef<undefined | TSetContextualInfo>(undefined)
+  const arrangeColumnsRef = useRef<{open: () => void}>(null)
+  const sortByColumnsRef = useRef<{open: () => void}>(null)
+  const importAnnotationsRef = useRef<{open: () => void}>(null)
+
   const [zoom, setZoom] = useState<number>(12)
   const isOverviewMode: boolean = (zoom <= OVERVIEW_MODE_ZOOM)
   const [toggles, setToggles] = useState<TAlignmentViewerToggles>(defaultAlignmentViewerToggles)
 
   const [colorScheme, setColorScheme] = useState(Object.keys(alignmentColorSchema)[0])
-  const [colorMode, setColorMode] = useState<TAlignmentColorMode>(alignmentColorModes[0])
+  const [colorMode, setColorMode] = useState<TAlignmentColorMode>(ALIGNMENT_COLOR_MODES[0])
   const [positionsToStyle, setPositionsToStyle] = useState<TAlignmentPositionsToStyle>("all")
+  const [hideUnstyledPositions, setHideUnstyledPositions] = useState(false)
   const [contextualInfoContainer, setContextualInfoContainer] = useState("status bar")
-  const [darkMode, setDarkMode] = useState(false)
+  const systemDarkMode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [darkMode, setDarkMode] = useState(systemDarkMode)
+
+  useEffect(() => {
+    function handleSystemDarkModeChange(event: MediaQueryListEvent) {
+      setDarkMode(event.matches)
+    }
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener("change", handleSystemDarkModeChange)
+
+    return () => {
+      window.matchMedia('(prefers-color-scheme: dark)').removeEventListener("change", handleSystemDarkModeChange)
+    }
+  }, [setDarkMode])
 
   const showSettings = (event: MouseEvent<HTMLDivElement>) => {
     event.stopPropagation()
@@ -345,7 +282,19 @@ export default function Chrome() {
     settingsRef.current?.close()
   }
 
-  const handleFileChange = useStartSpinning((newFile: File) => {
+  const showArrangeColumns = () => {
+    arrangeColumnsRef.current?.open()
+  }
+
+  const showImportAnnotations = () => {
+    importAnnotationsRef.current?.open()
+  }
+
+  const showSortByColumns = () => {
+    sortByColumnsRef.current?.open()
+  }
+
+  const handleFileChange = /*useStartSpinning*/((newFile: File) => {
     if (newFile === file) {
       return
     }
@@ -356,7 +305,7 @@ export default function Chrome() {
     }
   })
 
-  const handleUrlChange = useStartSpinning((newUrl: string) => {
+  const handleUrlChange = /*useStartSpinning*/((newUrl: string) => {
     if (newUrl === searchParams.get("url")) {
       return
     }
@@ -385,9 +334,9 @@ export default function Chrome() {
     setColorMode(value)
   }
 
-  const handlePositionsToStyleChange = useStartSpinning((value: TAlignmentPositionsToStyle) => {
-    setPositionsToStyle(value)
-  })
+  const handlePositionsToStyleChange = (value: TAlignmentPositionsToStyle) => {
+    setPositionsToStyle(value as TAlignmentPositionsToStyle)
+  }
 
   const handleContextualInfoContainerChange = (event: RadioChangeEvent) => {
     setContextualInfoContainer(event.target.value)
@@ -400,7 +349,7 @@ export default function Chrome() {
   const [file, setFile] = useState<File | undefined>()
   const [searchParams, setSearchParams] = useSearchParams()
   const url = searchParams.get("url")
-  const { alignment: newAlignment, error, mutate } = useAlignment(url || file)
+  const { alignment: newAlignment, error } = useAlignment(url || file)
   // console.log(
   //   alignment?.uuid.substring(0, 4), alignment?.referenceSequenceIndex,
   //   newAlignment?.uuid.substring(0, 4), newAlignment?.referenceSequenceIndex
@@ -411,16 +360,13 @@ export default function Chrome() {
   const [referenceSequenceIndex, setReferenceSequenceIndex] = useState(0)
   const [availableColumnsImported, setAvailableColumnsImported] = useState<string[]>([])
   const [availableColumnsDerived, setAvailableColumnsDerived] = useState<string[]>([])
-  const [showColumns, setShowColumns] = useState<string[]>(availableColumnsImported)
-  const [pinnedColumns, setPinnedColumns] = useState(["id"])
-  const [sortBy, _setSortBy] = useState<TAlignmentSortParams[]>([])
-  const setSortBy = useStartSpinning(_setSortBy)
-  const [groupBy, _setGroupBy] = useState<string | number | undefined>(undefined)
-  const setGroupBy = useStartSpinning(_setGroupBy)
+  const [pinnedColumns, setPinnedColumns] = useState<string[]>([])
+  const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[]>(availableColumnsImported.filter((col) => !pinnedColumns.includes(col)))
+  const [sortBy, setSortBy] = useState<TAlignmentSortParams[]>([])
+  const [groupBy, setGroupBy] = useState<string | number | undefined>(undefined)
   const [groupCount, setGroupCount] = useState(0)
   const [collapsibleGroups, setCollapsibleGroups] = useState<number[]>([])
-  const [collapsedGroups, _setCollapsedGroups] = useState<number[]>([])
-  const setCollapsedGroups = useStartSpinning(_setCollapsedGroups)
+  const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
 
   const handleGroupBy = useCallback((by: string | number | undefined) => {
     if (by === groupBy) {
@@ -440,12 +386,14 @@ export default function Chrome() {
     const uuid = alignment?.uuid
     setAlignment(newAlignment)
     if (uuid !== newAlignment.uuid) {
-      setReferenceSequenceIndex(0)
       const { importedFields, derivedFields } = getAlignmentAnnotationFields(newAlignment)
+      const newPinned = ["id"]
+      const newOtherVisibleColumns = importedFields.filter((col) => !newPinned.includes(col))
+      setReferenceSequenceIndex(0)
       setAvailableColumnsImported(importedFields)
       setAvailableColumnsDerived(derivedFields)
-      setShowColumns(importedFields)
-      setPinnedColumns(["id"])
+      setPinnedColumns(newPinned)
+      setOtherVisibleColumns(newOtherVisibleColumns)
       setSortBy([])
       setGroupBy(undefined)
       setCollapsedGroups([])
@@ -455,6 +403,7 @@ export default function Chrome() {
   }, [
     alignment, 
     newAlignment,
+    setReferenceSequenceIndex,
     setSortBy,
     setGroupBy,
     setCollapsedGroups,
@@ -464,7 +413,7 @@ export default function Chrome() {
   if (alignment) {
     displayFileName = (
       <>
-        <Text strong>{url ? <Link href={url}>{url}</Link> : file?.name}</Text> <Text>({alignment.depth} sequences, {alignment.length} columns)</Text>
+        <Text strong>{url ? <Link to={url}>{url}</Link> : file?.name}</Text> <Text>({alignment.depth} sequences, {alignment.length} columns)</Text>
       </>
     )
   }
@@ -477,17 +426,20 @@ export default function Chrome() {
       annotationFields: alignment?.annotationFields,
       availableColumnsImported, 
       availableColumnsDerived, 
-      showColumns, 
+      otherVisibleColumns, 
       pinnedColumns,
       sortBy, 
       groupBy,
       contextMenuTarget, 
       paddingXS: antdThemeToken.paddingXS,
-      setShowColumns,
+      setOtherVisibleColumns,
       setPinnedColumns,
+      showArrangeColumns,
       setSortBy,
+      showSortByColumns,
       setGroupBy: handleGroupBy,
       setReferenceSequenceIndex,
+      showImportAnnotations,
     })
   }, [
     isOverviewMode,
@@ -495,14 +447,15 @@ export default function Chrome() {
     alignment?.annotationFields,
     availableColumnsImported, 
     availableColumnsDerived, 
-    showColumns, 
+    otherVisibleColumns, 
     pinnedColumns,
     sortBy, 
     groupBy,
     contextMenuTarget, 
     antdThemeToken.paddingXS,
     handleGroupBy,
-    setSortBy
+    setReferenceSequenceIndex,
+    setSortBy,
   ])
 
   const sortMenu = {
@@ -511,6 +464,7 @@ export default function Chrome() {
       availableColumnsImported,
       availableColumnsDerived,
       sortBy,
+      groupBy,
       paddingXS: antdThemeToken.paddingXS,
     }),
     onClick: contextMenu.onClick,
@@ -533,17 +487,18 @@ export default function Chrome() {
       annotationFields: alignment?.annotationFields,
       availableColumnsImported,
       availableColumnsDerived,
-      showColumns,
-      pinnedColumns
+      otherVisibleColumns,
+      pinnedColumns,
+      groupBy,
     }),
     onClick: contextMenu.onClick,
   }
 
-  const handleAlignmentViewerMouseHover = useCallback((info?: TContextualInfo, eventData?: TargetCellInfo) => {
-    setContextualInfoRef.current?.(info, eventData)
+  const handleAlignmentViewerMouseHover = useCallback((info?: TAVMouseEventInfo) => {
+    setContextualInfoRef.current?.(info)
   }, [setContextualInfoRef])
 
-  const handleSortActionIconClick = useCallback((field: keyof TSequence) => {
+  const handleSortActionIconClick = useCallback((field: string) => {
     // cycle between "asc" and "desc"
     if ((sortBy.length !== 1) || (sortBy[0].field !== field) || (sortBy[0].order === "desc")) {
       setSortBy([{field, order: "asc"}])
@@ -619,8 +574,8 @@ export default function Chrome() {
       <AlignmentViewerAntdWrapper 
         alignment={alignment}
         referenceSequenceIndex={referenceSequenceIndex}
-        showColumns={showColumns}
         pinnedColumns={pinnedColumns}
+        otherVisibleColumns={otherVisibleColumns}
         sortBy={sortBy}
         groupBy={groupBy}
         collapsedGroups={collapsedGroups}
@@ -631,6 +586,8 @@ export default function Chrome() {
         alignmentColorPalette={alignmentColorSchema[colorScheme]}
         alignmentColorMode={colorMode}
         positionsToStyle={positionsToStyle}
+        hideUnstyledPositions={hideUnstyledPositions}
+        highlightCurrentSequence={true}
         darkMode={darkMode}
         adaptiveContainerRef={adaptiveContainerRef}
         onMouseHover={handleAlignmentViewerMouseHover}
@@ -645,7 +602,7 @@ export default function Chrome() {
   }, [
     alignment,
     referenceSequenceIndex,
-    showColumns,
+    otherVisibleColumns,
     pinnedColumns,
     sortBy,
     groupBy,
@@ -656,6 +613,7 @@ export default function Chrome() {
     colorScheme,
     colorMode,
     positionsToStyle,
+    hideUnstyledPositions,
     darkMode,
     handleAlignmentViewerMouseHover,
     handleSortActionIconClick,
@@ -664,6 +622,16 @@ export default function Chrome() {
     handleAlignmentGroupsChanged,
     handleAlignmentViewerBusy,
   ])
+
+  const contextualInfoComponent = useMemo(() => {
+    if (!alignment) {
+      return null
+    } else  if (contextualInfoContainer === "status bar") {
+      return <StatusBar ref={(setContent: TSetContextualInfo) => {setContextualInfoRef.current = setContent}} />
+    } else {
+      return <ContextualInfoTooltip ref={(setContent: TSetContextualInfo) => {setContextualInfoRef.current = setContent}} />
+    }  
+  }, [alignment, contextualInfoContainer])
 
   // console.log("in chrome component: spinning", spinning)
   // console.log("in chrome, spinning =", spinning, Date.now())
@@ -710,17 +678,14 @@ export default function Chrome() {
         </Dropdown>
         <Flex className="test-spin-wrapper" align='center' justify='center' style={{display: spinning? "flex" : "none"}}>
           <div className="test-spin-mask"/>
+          {/* <BusyIndicator style={{width: 300}} /> */}
           <Spin indicator={<LoadingOutlined style={{fontSize: 36}} spin />} />
         </Flex>
-        {(contextualInfoContainer === "status bar") ?
-          <StatusBar ref={(setContent: TSetContextualInfo) => {setContextualInfoRef.current = setContent}} /> :
-          <ContextualInfoTooltip ref={(setContent: TSetContextualInfo) => {setContextualInfoRef.current = setContent}} />
-        }
+        {contextualInfoComponent}
       </Layout>
       <Settings 
         ref={settingsRef} 
         file={file} 
-        alignment={alignment}
         isLoading={isLoadingAlignment} // {isLoading}
         error={error}
         zoom={zoom}
@@ -728,6 +693,7 @@ export default function Chrome() {
         colorScheme={colorScheme}
         colorMode={colorMode}
         positionsToStyle={positionsToStyle}
+        hideUnstyledPositions={hideUnstyledPositions}
         contextualInfoContainer={contextualInfoContainer}
         darkMode={darkMode}
         onFileChange={handleFileChange}
@@ -737,8 +703,30 @@ export default function Chrome() {
         onColorSchemeChange={handleColorSchemeChange}
         onColorModeChange={handleColorModeChange}
         onPositionsToStyleChange={handlePositionsToStyleChange}
+        onHideUnstyledPositionsChange={setHideUnstyledPositions}
         onContextualInfoContainerChange={handleContextualInfoContainerChange}
         onDarkModeChange={handleDarkModeChange}
+      />
+      <ArrangeColumns
+        ref={arrangeColumnsRef}
+        annotationFields={alignment?.annotationFields}
+        availableColumnsImported={availableColumnsImported}
+        availableColumnsDerived={availableColumnsDerived}
+        pinnedColumns={pinnedColumns}
+        otherVisibleColumns={otherVisibleColumns}
+        onSetOtherVisibleColumns={setOtherVisibleColumns}
+        onSetPinnedColumns={setPinnedColumns}
+      />
+      <SortByColumns
+        ref={sortByColumnsRef}
+        annotationFields={alignment?.annotationFields}
+        availableColumnsImported={availableColumnsImported}
+        availableColumnsDerived={availableColumnsDerived}
+        sortBy={sortBy}
+        onSetSortBy={setSortBy}
+      />
+      <ImportAnnotations
+        ref={importAnnotationsRef}
       />
     </ConfigProvider>
   )

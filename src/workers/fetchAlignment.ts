@@ -1,52 +1,66 @@
-import type { TAlignment } from '../lib/Alignment'
+import type { TAlignment } from '../lib/types'
 
 import { expose } from 'threads/worker'
 // const { expose } = require('threads/worker')
-import { createAlingmentFromSequences, createAlingmentFromText } from '../lib/Alignment'
 
-const getKeys = Object.keys as <T extends object>(obj: T) => Array<keyof T>
+import {
+  createAlingmentFromSequenceRecords, 
+  createAlingmentFromText
+} from '../lib/alignment'
+import { getObjectKeys } from '../lib/utils'
+import { createSequenceRecord } from '../lib/fasta'
 
-function generateRawData(row: {level1: number, level2: number}, col: {level3: number, level4: number}) {
+
+
+function generateRandomAlignment(row: {level1: number, level2: number}, col: {level3: number, level4: number}) {
   // console.log("Begin randome", Date.now())
-  const res = []
+  const alphabet = "ACDEFGHIKLMNPQRSTVWY-"
+  const length = 415
 
-  const rowKeys = getKeys(row)
-  const colKeys = getKeys(col)
+  const numTemplates = 5
+  const templates = new Array(numTemplates)
+  for (let i = 0; i < numTemplates; ++i) {
+    templates[i] = new Array(length)
+    for (let j = 0; j < length; ++j) {
+      templates[i][j] = Math.floor(Math.random() * alphabet.length)
+    }
+  }
 
+  const sequences = []
+  const charArray = new Array(length)
+  const rowKeys = getObjectKeys(row)
+  const colKeys = getObjectKeys(col)
   let sn = 0
   for (let i = 0; i < row[rowKeys[0]]; i++) {
     for (let j = 0; j < row[rowKeys[1]]; j++) {
       for (let m = 0; m < col[colKeys[0]]; m++) {
         for (let n = 0; n < col[colKeys[1]]; n++) {
+          const which = Math.floor(Math.random() * 10000 % numTemplates)
+          for (let k = 0; k < length; ++k) {
+            charArray[k] = alphabet[(templates[which][k] + sn) % alphabet.length]
+          }
+
+          sequences.push(createSequenceRecord(
+            sn, 
+            `Seq${sn + 1}`, 
+            `level1=${i} level2=${j} level3=${m} level4=${n}`, 
+            charArray.join("")
+          ))
           ++sn
-          res.push({
-            id: `${sn}`,
-            __actualId__: `${sn}`,
-            level1: `level1:${i}`,
-            level2: `level2:${j}`,
-            level3: `level3:${m}`,
-            level4: `level4:${n}`,
-            sequence: "ACDEFGHIKLMNPQRSTVWY-"[sn % 21].repeat(315),
-            __sequenceIndex__: sn - 1,
-            __links__: []
-          })
         }
       }
     }
   }
 
   // console.log("Done randome", Date.now())
-  return res
+  return createAlingmentFromSequenceRecords("random", sequences, {})
 }
 
 async function fetcher(fileOrUrl?:File | string) {
   // console.log("Begin fetching in remoteFetcher", Date.now())
   let alignment: TAlignment | undefined
   if (fileOrUrl === "random") {
-    alignment = createAlingmentFromSequences("random", generateRawData(
-      { level1: 100, level2: 10 },
-      { level3: 100, level4: 10 },
-    ))
+    alignment = generateRandomAlignment({ level1: 10, level2: 10 }, { level3: 100, level4: 100 })
   } else {
     let text: string
     if (typeof fileOrUrl === "string") {

@@ -1,4 +1,4 @@
-import type { TAlignmentPickerProps } from './AlignmentPicker'
+import type { TAlignmentPickerProps } from '../lib/types'
 
 import { Flex, Typography, Card } from 'antd'
 

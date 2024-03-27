@@ -1,4 +1,3 @@
-import type { ReactNode, CSSProperties, MutableRefObject } from 'react'
 import type {
   S2DataConfig, 
   S2Options, 
@@ -15,28 +14,35 @@ import type {
   HeaderIconClickParams, 
   BaseCell,  
 } from '@antv/s2'
-import type { LooseObject, Event as CanvasEvent } from '@antv/g-canvas'
+import type { Event as CanvasEvent } from '@antv/g-canvas'
 import type { SheetComponentOptions, SheetComponentsProps } from '@antv/s2-react'
+
 import type {
+  TColumnWidths, 
+  TAVExtraOptions,
   TAlignment, 
-  TSequence, 
-  TAlignmentPositionsToStyle, 
   TAlignmentSortParams, 
-  TSequenceGroup,
-} from '../lib/Alignment'
-import type { TAlignmentColorMode, TColorEntry, TAlignmentColorPalette } from '../lib/AlignmentColorSchema'
-import type { TColumnWidths, TAVExtraOptions } from '../lib/AVTableSheet'
+  TAlignmentViewerToggles,
+  TContextualInfo,
+  TAVMouseEventInfo,
+  TDimensions,
+  TAlignmentViewerProps,
+  TColorEntry, 
+} from '../lib/types'
 
 import {
   AVTableSheet, 
-  SPECIAL_ROWS, 
-  SEQUENCE_LOGO_ROW_HEIGHT_RATIO,
   useS2Options, 
   useS2ThemeCfg, 
   useS2DataCfg, 
 } from '../lib/AVTableSheet'
-import { HIDDEN_ANNOTATION_FIELDS } from '../lib/Alignment'
-import { alignmentColorModes } from '../lib/AlignmentColorSchema'
+import {
+  SPECIAL_ROWS,
+  HIDDEN_ANNOTATION_FIELDS, 
+  ALIGNMENT_COLOR_MODES,
+  SEQUENCE_LOGO_ROW_HEIGHT_RATIO,
+  SEQUENCE_LOGO_BAR_STACK_ZOOM,
+} from '../lib/constants'
 import Sprites from '../lib/sprites'
 import BarSprites from '../lib/BarSprites'
 import { ObjectPool } from "../lib/objectPool"
@@ -45,11 +51,16 @@ import { useSequenceLogos } from '../lib/sequenceLogos'
 import clsx from 'clsx'
 import { spawn, Thread, Worker } from 'threads'
 // const { spawn, Thread, Worker } = require('threads')
-import { isNil, countBy, sortBy, range } from 'lodash'
 
 import { useRef, useMemo, useState, useEffect, useCallback, } from 'react'
-import { Node as S2Node, generateId, GuiIcon, SERIES_NUMBER_FIELD, CellTypes } from '@antv/s2'
-import { setLang, extendLocale } from '@antv/s2'
+import {
+  setLang, 
+  extendLocale,
+  Node as S2Node, 
+  GuiIcon, 
+  SERIES_NUMBER_FIELD, 
+  CellTypes, 
+} from '@antv/s2'
 import { SheetComponent } from '@antv/s2-react'
 import '@antv/s2-react/dist/style.min.css'
 
@@ -70,30 +81,10 @@ setLang("en_US")
 
 declare global {
   interface Window {
-    s2: unknown
+    s2: AVTableSheet
   }
 }
 
-export type TAVColorTheme = {
-  headerText: string, // 角头字体、列头字体
-  backgroundAlt: string, // 行头背景、数据格背景(斑马纹)
-  backgroundOnHover: string, // 行头&数据格交互(hover、选中、十字)
-  headerBackground: string, // 角头背景、列头背景
-  headerBackgroundOnHover: string, // 列头交互(hover、选中)
-  selectionMask: string, // 刷选遮罩
-  link: string, // '#69b1ff', // '#565C64', // 行头 link
-  resizeIndicator: string, // mini bar、resize 交互(参考线等)
-  background: string, // 数据格背景(非斑马纹)、整体表底色(建议白色)
-  border: string, // 行头边框、数据格边框
-  headerBorder: string, // 角头边框、列头边框
-  verticalSplitLine: string, // 竖向大分割线
-  horizontalSplitLine: string, // 横向大分割线
-  text: string, // 数据格字体
-  borderOnHover: string, // 行头字体、数据格交互色(hover)
-}
-
-
-export type TAlignmentViewerToggles = Record<string, {label: string, visible: boolean}>
 const defaultAlignmentViewerToggles = {} as TAlignmentViewerToggles
 for (const [k, v] of Object.entries(SPECIAL_ROWS)) {
   defaultAlignmentViewerToggles[k] = {label: v.label, visible: v.defaultVisible}
@@ -101,88 +92,9 @@ for (const [k, v] of Object.entries(SPECIAL_ROWS)) {
 defaultAlignmentViewerToggles["$$MiniMap$$"] = {label: "MiniMap", visible: true}
 export { defaultAlignmentViewerToggles }
 
-
-// export type TAlignmentViewerToggles = Record<keyof typeof defaultToggles, boolean>
-export type TContextualInfo = {
-  key: string,
-  sequenceIndex?: number | string,
-  residueIndex?: number,
-  row?: number,
-  col?: number,
-  sequenceId?: string,
-  content: ReactNode[],
-  anchorX: number,
-  anchorY: number,
-  anchorWidth: number,
-  anchorHeight: number,
-}
-export type TSetContextualInfo = (info?: TContextualInfo) => void
-
-export type TAVMouseEventInfo = {
-  event: CanvasEvent, 
-  target: S2CellType<ViewMeta>, 
-  viewMeta: ViewMeta | S2Node, 
-  iconName: string | undefined,
-  contextualInfo?: TContextualInfo,
-}
-
-export type TDimensions = {
-  zoom: number,
-  fontFamily: string,
-  residueFontFamily: string,
-  fontSize: number,
-  regularTextHeight: number,
-  residueFontWidth: number, 
-  residueFontHeight: number, 
-  residueFontActualBoundingBoxAscents: number[], 
-  residueFontActualBoundingBoxDescents: number[],
-  residueWidth: number, 
-  residueHeight: number,
-  residueLetterSpacing: string,
-  paddingLeft: number,
-  paddingRight: number,
-  paddingTop: number,
-  paddingBottom: number,
-  rowHeight: number,
-  colHeight: number,
-  cornerCellWidth: number,
-  residueNumberFontSize: number,
-  residueNumberHeight: number,
-  residueNumberTextActualBoundingBoxDescent: number,
-  minMinimapWidth: number,
-  maxMinimapWidth: number,
-  minimapMargin: number, 
-}
-
-export type TAlignmentViewerProps = {
-  className?: string,
-  style?: CSSProperties,
-  alignment: TAlignment,
-  referenceSequenceIndex?: number,
-  showColumns?: string[],
-  pinnedColumns?: string[],
-  sortBy?: TAlignmentSortParams[],
-  groupBy?: string | number,
-  collapsedGroups?: number[],
-  zoom?: number,
-  isOverviewMode?: boolean,
-  toggles?: TAlignmentViewerToggles,
-  fontFamily?: string,
-  residueFontFamily?: string,
-  alignmentColorPalette?: TAlignmentColorPalette,
-  alignmentColorMode?: TAlignmentColorMode,
-  positionsToStyle?: TAlignmentPositionsToStyle, 
-  scrollbarSize?: number,
-  highlightCurrentSequence?: boolean,
-  colorTheme: TAVColorTheme,
-  adaptiveContainerRef?: MutableRefObject<HTMLElement | null>,
-  onMouseHover?: TSetContextualInfo,
-  onSortActionIconClick?: (field: string) => void,
-  onExpandCollapseGroupIconClick?: (groupIndex: number) => void,
-  onExpandCollapseAllGroupsIconClick?: () => void,
-  onContextMenu?: (info: TAVMouseEventInfo) => void,
-  onBusy?: (isBusy: boolean) => void,
-  onGroupsChanged?: (groups: TSequenceGroup[]) => void,
+// eslint-disable-next-line  @typescript-eslint/no-explicit-any
+function useChangeDetector(prompt: string, ...args: any[]) {
+  useEffect(() => { console.log(prompt) }, [prompt, ...args])
 }
 
 function useDimensions(
@@ -193,6 +105,9 @@ function useDimensions(
   zoom: number,
 ): TDimensions {
   return useMemo(() => {
+    const iconSize = zoom
+    const iconMarginLeft = zoom / 2
+    const iconMarginRight = 0
     const minMinimapWidth = 20, maxMinimapWidth = 120, minimapMargin = 4
     const emptyResult =  {
       zoom,
@@ -202,8 +117,8 @@ function useDimensions(
       regularTextHeight: 0,
       residueFontWidth: 0, 
       residueFontHeight: 0, 
-      residueFontActualBoundingBoxAscents: [], 
-      residueFontActualBoundingBoxDescents: [],
+      residueFontActualBoundingBoxAscents: {}, 
+      residueFontActualBoundingBoxDescents: {},
       residueWidth: 0, 
       residueHeight: 0,
       residueLetterSpacing: "0px",
@@ -220,6 +135,9 @@ function useDimensions(
       minMinimapWidth, 
       maxMinimapWidth,
       minimapMargin,
+      iconSize,
+      iconMarginLeft,
+      iconMarginRight,
     }
 
     if (!alignment?.alphabet) {
@@ -242,8 +160,20 @@ function useDimensions(
       paddingTop = Math.ceil(zoom * 1 / 4)
       paddingBottom = paddingTop
       cornerCellWidth = Math.ceil(fontSize / 3) + paddingLeft + paddingRight
-      const residueFontActualBoundingBoxAscents = Array(alignment.alphabet.length).fill(zoom)
-      const residueFontActualBoundingBoxDescents = Array(alignment.alphabet.length).fill(0)
+
+      const residueFontActualBoundingBoxAscents: Record<string, number> = {}
+      const residueFontActualBoundingBoxDescents: Record<string, number> = {}
+      for (const char of alignment.alphabet) {
+        residueFontActualBoundingBoxAscents[char] = zoom
+        residueFontActualBoundingBoxDescents[char] = 0
+      }
+
+      for (const char of alignment.pssmAlphabet) {
+        if (!(char in residueFontActualBoundingBoxAscents)) {
+          residueFontActualBoundingBoxAscents[char] = zoom
+          residueFontActualBoundingBoxDescents[char] = 0
+        }
+      }
 
       return {
         zoom,
@@ -271,6 +201,9 @@ function useDimensions(
         minMinimapWidth, 
         maxMinimapWidth,
         minimapMargin,
+        iconSize,
+        iconMarginLeft,
+        iconMarginRight,
       }
     }
 
@@ -293,17 +226,27 @@ function useDimensions(
     let residueTextMetrics = ctx.measureText(alignment.alphabet)
     const residueFontWidth = (residueTextMetrics?.width / alignment.alphabet.length) ?? 0
     let residueFontHeight = 0
-    const residueFontActualBoundingBoxAscents = Array(alignment.alphabet.length).fill(0)
-    const residueFontActualBoundingBoxDescents = Array(alignment.alphabet.length).fill(0)
-    for (let i = 0; i < alignment.alphabet.length; ++i) {
-      residueTextMetrics = ctx.measureText(alignment.alphabet[i])
-      residueFontActualBoundingBoxAscents[i] = residueTextMetrics.actualBoundingBoxAscent
-      residueFontActualBoundingBoxDescents[i] = residueTextMetrics.actualBoundingBoxDescent
+
+    const residueFontActualBoundingBoxAscents: Record<string, number> = {}
+    const residueFontActualBoundingBoxDescents: Record<string, number> = {}
+    for (const char of alignment.alphabet) {
+      residueTextMetrics = ctx.measureText(char)
+      residueFontActualBoundingBoxAscents[char] = residueTextMetrics.actualBoundingBoxAscent
+      residueFontActualBoundingBoxDescents[char] = residueTextMetrics.actualBoundingBoxDescent
       const h = residueTextMetrics.actualBoundingBoxAscent + residueTextMetrics.actualBoundingBoxDescent
       if (h > residueFontHeight) {
         residueFontHeight = h
       }
     }
+
+    for (const char of alignment.pssmAlphabet) {
+      if (!(char in residueFontActualBoundingBoxAscents)) {
+        residueTextMetrics = ctx.measureText(char)
+        residueFontActualBoundingBoxAscents[char] = residueTextMetrics.actualBoundingBoxAscent
+        residueFontActualBoundingBoxDescents[char] = residueTextMetrics.actualBoundingBoxDescent  
+      }
+    }
+
     const residueHeight = Math.ceil(residueFontHeight)
     const residueWidth = Math.ceil(residueFontWidth * 1.5)
     const residueLetterSpacing = `${residueWidth - residueFontWidth}px`
@@ -368,8 +311,20 @@ function useDimensions(
       minMinimapWidth, 
       maxMinimapWidth, 
       minimapMargin, 
+      iconSize,
+      iconMarginLeft,
+      iconMarginRight,
     }
-  }, [zoom, isOverviewMode, alignment?.alphabet, alignment?.depth, alignment?.length, fontFamily, residueFontFamily])
+  }, [
+    zoom, 
+    isOverviewMode, 
+    alignment?.alphabet, 
+    alignment?.pssmAlphabet, 
+    alignment?.depth, 
+    alignment?.length, 
+    fontFamily, 
+    residueFontFamily
+  ])
 }
 
 function getAVMouseEventInfo(data: TargetCellInfo): TAVMouseEventInfo {
@@ -406,10 +361,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     className,
     style,
     referenceSequenceIndex: propsReferenceSequenceIndex = 0,
-    showColumns = [],
-    pinnedColumns = [], // ["id"],
     groupBy: propsGroupBy,
-    collapsedGroups = [],
     zoom = 12,
     isOverviewMode = false,
     toggles = defaultAlignmentViewerToggles,
@@ -417,8 +369,9 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     residueFontFamily = "monospace",
     scrollbarSize = 10,
     // alignmentColorPalette = {Dark: new Map<string, TColorEntry>(), Light: new Map<string, TColorEntry>()},
-    // alignmentColorMode = alignmentColorModes[0],
+    alignmentColorMode = ALIGNMENT_COLOR_MODES[0],
     // positionsToStyle = "all",
+    hideUnstyledPositions = false,
     highlightCurrentSequence = false,
     colorTheme,
     adaptiveContainerRef,
@@ -434,7 +387,16 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   // parent states for derived states
   const propsAlignment = alignmentViewerProps.alignment
   const [alignment, setAlignment] = useState<TAlignment | null>(null)
-  
+
+  const propsPinnedColumns = useMemo(() => (alignmentViewerProps.pinnedColumns ?? []), [alignmentViewerProps.pinnedColumns])
+  const [pinnedColumns, setPinnedColumns] = useState<string[]>([]) // ["id"]
+
+  const propsOtherVisibleColumns = useMemo(() => (alignmentViewerProps.otherVisibleColumns ?? []), [alignmentViewerProps.otherVisibleColumns])
+  const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[]>([])
+
+  const propsCollapsedGroups = useMemo(() => (alignmentViewerProps.collapsedGroups ?? []), [alignmentViewerProps.collapsedGroups])
+  const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
+
   const propsSortBy = useMemo(() => (alignmentViewerProps.sortBy ?? []), [alignmentViewerProps.sortBy])
   const [sortBy, setSortBy] = useState<TAlignmentSortParams[]>([])
 
@@ -444,17 +406,13 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   }), [alignmentViewerProps.alignmentColorPalette])
   const [alignmentColorPalette, setAlignmentColorPalette] = useState(propsAlignmentColorPalette)
 
-  const propsAlignmentColorMode = alignmentViewerProps.alignmentColorMode ?? alignmentColorModes[0]
-  const [alignmentColorMode, setAlignmentColorMode] = useState(propsAlignmentColorMode)
-  
+  const propsDarkMode = alignmentViewerProps.darkMode ?? false
+  const [darkMode, setDarkMode] = useState(propsDarkMode)
+
   const propsPositionsToStyle = alignmentViewerProps.positionsToStyle ?? "all"
   const [positionsToStyle, setPositionsToStyle] = useState(propsPositionsToStyle)
 
   const s2Ref = useRef<AVTableSheet>(null)
-
-  const iconSize = 10
-  const iconMarginLeft = 4
-  const iconMarginRight = 0
 
   const dimensions: TDimensions = useDimensions(alignment, isOverviewMode, fontFamily, residueFontFamily, zoom)
 
@@ -463,24 +421,13 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     let pinnedColumnsCount = 0
 
     if (alignment?.annotationFields && !isOverviewMode) {
-      const availableFields = []
-      for (const field of Object.keys(alignment.annotationFields)) {
-        if (!HIDDEN_ANNOTATION_FIELDS.includes(field)) {
-          availableFields.push(field)
-        }
-      }
-
       for (const field of pinnedColumns) {
-        if (availableFields.includes(field) && !shownFields.includes(field)) {
-          shownFields.push(field)
-        }
+        shownFields.push(field)
       }
       pinnedColumnsCount = shownFields.length
 
-      for (const field of showColumns) {
-        if (availableFields.includes(field) && !shownFields.includes(field)) {
-          shownFields.push(field)
-        }
+      for (const field of otherVisibleColumns) {
+        shownFields.push(field)
       }  
     }
 
@@ -488,27 +435,33 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     shownFields.push("$$minimap$$")
 
     return [shownFields, pinnedColumnsCount]
-  }, [alignment?.annotationFields, showColumns, pinnedColumns, isOverviewMode])
+  }, [alignment?.annotationFields, otherVisibleColumns, pinnedColumns, isOverviewMode])
 
   // const handleActionIconClick = useCallback((event: CanvasEvent) => {
-  const handleSortActionIconClick = useCallback((props: HeaderIconClickParams) => {
+  const handleColHeaderActionIconClick = useCallback((props: HeaderIconClickParams) => {
     const { iconName, meta: node, event } = props
-    s2Ref.current?.interaction.reset()
+    // s2Ref.current?.interaction.reset()
     // console.log(iconName, node, event)
-    onSortActionIconClick?.(node.field)
-  }, [s2Ref, onSortActionIconClick])
+    if (iconName.startsWith("Sort")) {
+      onSortActionIconClick?.(node.field)
+    }
+  }, [/*s2Ref,*/ onSortActionIconClick])
 
   // console.log("setS2ThemeCfg EFFECT", dimensions, scrollbarSize, highlightCurrentSequence)
   const s2ThemeCfg = useS2ThemeCfg(
     fontFamily,
     dimensions,
-    iconSize,
-    iconMarginLeft,
-    iconMarginRight,
     scrollbarSize,
     highlightCurrentSequence,
     colorTheme,
   )
+  // useChangeDetector()
+  // useChangeDetector("s2ThemeCfg changed", s2ThemeCfg)
+  // useChangeDetector("- fontFamily changed", fontFamily)
+  // useChangeDetector("- dimensions changed", dimensions)
+  // useChangeDetector("- scrollbarSize changed", scrollbarSize)
+  // useChangeDetector("- highlightCurrentSequence changed", highlightCurrentSequence)
+  // useChangeDetector("- colorTheme changed", colorTheme)  
 
   // const sortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
   const [sortedIndices, setSortedIndices] = useState<number[]>([])
@@ -518,6 +471,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   const maxMinimapHeight = window.innerHeight
   useEffect(() => {
     async function asyncUpdate() {
+      // console.log("in async update")
       onBusy?.(true)
 
       const tasks: Array<"setReference" | "group" | "sort" | "minimap"> = []
@@ -567,108 +521,121 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
         (tasks.includes("sort")) ||
         (propsPositionsToStyle !== positionsToStyle) || 
         (propsAlignmentColorPalette !== alignmentColorPalette) || 
-        (propsAlignmentColorMode !== alignmentColorMode)
+        (propsDarkMode !== darkMode)
       ) {
         tasks.push("minimap")
       }
 
-      if (tasks.length === 0) {
-        onBusy?.(false)
-        return
-      }
-      
-      const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
-      const remoteUpdateAlignment = await spawn(worker)
-      const [
-        outputAlignment, newSortedIndices, overviewBuffer, minimapBuffer
-      ]: [TAlignment, number[], ArrayBuffer | undefined, ArrayBuffer | undefined] = await remoteUpdateAlignment(
-        tasks,
-        inputAlignment,
-        sortedIndices,
-        propsReferenceSequenceIndex,
-        propsSortBy,
-        propsGroupBy,
-        propsPositionsToStyle,
-        propsAlignmentColorPalette,
-        propsAlignmentColorMode,
-        maxMinimapWidth,
-        maxMinimapHeight,
-      )
-      await Thread.terminate(remoteUpdateAlignment)
-
-      const didSetReference = tasks.includes("setReference")
-      const didGroup = tasks.includes("group")
-      if (didSetReference || didGroup) {
-        const newAlignment = {...inputAlignment}
-        newAlignment.sequences = outputAlignment.sequences
-        
-        if (didSetReference) {
-          newAlignment.referenceSequenceIndex = outputAlignment.referenceSequenceIndex
-          newAlignment.referenceSequence = outputAlignment.referenceSequence  
-        }
-
-        if (didGroup) {
-          newAlignment.groupBy = outputAlignment.groupBy
-          newAlignment.groups = outputAlignment.groups
-          onGroupsChanged?.(newAlignment.groups)
-        }
-
-        setAlignment(newAlignment)
-      }
-
-      if (didGroup || tasks.includes("sort")) {
-        setSortedIndices(newSortedIndices)
-        if (sortBy !== propsSortBy) {
-          setSortBy(propsSortBy)
-        }
-      }
-
-      if (tasks.includes("minimap")) {
-        if (overviewBuffer) {
-          const overviewImageWidth = outputAlignment.length
-          const overviewImageHeight = outputAlignment.depth
-          const overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewImageWidth, overviewImageHeight)
-          setOverviewImageData(overviewImageData)
-          
-          const minimapWidth = (overviewImageWidth > maxMinimapWidth ) ? maxMinimapWidth : overviewImageWidth
-          const minimapHeight = (overviewImageHeight > maxMinimapHeight) ? maxMinimapHeight : overviewImageHeight
-          const newMinimapImage = new OffscreenCanvas(minimapWidth, minimapHeight)
-          const ctx = newMinimapImage?.getContext("2d")
-          if (minimapBuffer) {
-            const minimapImageData = new ImageData(new Uint8ClampedArray(minimapBuffer), minimapWidth, minimapHeight)
-            ctx?.putImageData(minimapImageData, 0, 0)
-          } else {
-            ctx?.putImageData(overviewImageData, 0, 0)
-          }
-          setMinimapImage(newMinimapImage)
-        }
-
-        if (propsPositionsToStyle !== positionsToStyle) {
-          setPositionsToStyle(propsPositionsToStyle)
-        }
-        
-        if (propsAlignmentColorPalette !== alignmentColorPalette) {
-          setAlignmentColorPalette(propsAlignmentColorPalette)
-        }
-
-        if (propsAlignmentColorMode !== alignmentColorMode) {
-          setAlignmentColorMode(propsAlignmentColorMode)
-        }
-      }
+      if (tasks.length > 0) {
+        const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
+        const remoteUpdateAlignment = await spawn(worker)
+        const [
+          outputAlignment, newSortedIndices, overviewBuffer, minimapBuffer, minimapImageWidth, minimapImageHeight
+        ]: [TAlignment, number[], ArrayBuffer | undefined, ArrayBuffer | undefined, number | undefined, number | undefined] = await remoteUpdateAlignment(
+          tasks,
+          inputAlignment,
+          sortedIndices,
+          propsReferenceSequenceIndex,
+          propsSortBy,
+          propsGroupBy,
+          propsPositionsToStyle,
+          propsDarkMode ? propsAlignmentColorPalette["Dark"] : propsAlignmentColorPalette["Light"],
+          maxMinimapWidth,
+          maxMinimapHeight,
+        )
+        await Thread.terminate(remoteUpdateAlignment)
   
-      // console.log("set alignment", alignment.uuid.substring(0, 4), "->", propsAlignment.uuid.substring(0, 4))
+        const didSetReference = tasks.includes("setReference")
+        const didGroup = tasks.includes("group")
+        if (didSetReference || didGroup) {
+          const newAlignment = {...inputAlignment}
+          newAlignment.annotations = outputAlignment.annotations
+          
+          if (didSetReference) {
+            newAlignment.referenceSequenceIndex = outputAlignment.referenceSequenceIndex
+          }
+  
+          if (didGroup) {
+            newAlignment.groupBy = outputAlignment.groupBy
+            newAlignment.groups = outputAlignment.groups
+            onGroupsChanged?.(newAlignment.groups)
+          }
+  
+          setAlignment(newAlignment)
+        }
+  
+        if (didGroup || tasks.includes("sort")) {
+          setSortedIndices(newSortedIndices)
+          if (sortBy !== propsSortBy) {
+            setSortBy(propsSortBy)
+          }
+        }
+  
+        if (tasks.includes("minimap")) {
+          if (overviewBuffer) {
+            const overviewImageWidth = outputAlignment.length
+            const overviewImageHeight = outputAlignment.depth
+            const overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewImageWidth, overviewImageHeight)
+            setOverviewImageData(overviewImageData)
+            
+            const minimapWidth = minimapImageWidth ?? overviewImageWidth
+            const minimapHeight = minimapImageHeight ?? overviewImageHeight
+            const newMinimapImage = new OffscreenCanvas(minimapWidth, minimapHeight)
+            const ctx = newMinimapImage?.getContext("2d")
+            if (minimapBuffer && minimapImageWidth && minimapImageHeight) {
+              const minimapImageData = new ImageData(new Uint8ClampedArray(minimapBuffer), minimapImageWidth, minimapImageHeight)
+              ctx?.putImageData(minimapImageData, 0, 0)
+            } else {
+              ctx?.putImageData(overviewImageData, 0, 0)
+            }
+            setMinimapImage(newMinimapImage)
+          }
+  
+          if (propsPositionsToStyle !== positionsToStyle) {
+            setPositionsToStyle(propsPositionsToStyle)
+          }
+          
+          if (propsAlignmentColorPalette !== alignmentColorPalette) {
+            setAlignmentColorPalette(propsAlignmentColorPalette)
+          }
+  
+          if (propsDarkMode !== darkMode) {
+            setDarkMode(propsDarkMode)
+          }
+        }
+
+        // console.log("set alignment", alignment?.uuid.substring(0, 4), "->", propsAlignment.uuid.substring(0, 4))
+      }
+
+      if (pinnedColumns !== propsPinnedColumns) {
+        setPinnedColumns(propsPinnedColumns)
+      }
+
+      if (otherVisibleColumns !== propsOtherVisibleColumns) {
+        setOtherVisibleColumns(propsOtherVisibleColumns)
+      }
+
+      if (collapsedGroups !== propsCollapsedGroups) {
+        setCollapsedGroups(propsCollapsedGroups)
+      }
+
       if ((propsAlignment.uuid !== alignment?.uuid) && s2Ref.current?.options.style?.colCfg?.widthByFieldValue) {
         s2Ref.current.options.style.colCfg.widthByFieldValue = undefined
       }
 
-      // spinning will be stopped in AfterRender event handler
-      // onBusy?.(false)
+      onBusy?.(false)
     }
     asyncUpdate()
   }, [
     propsAlignment, 
     alignment,
     propsReferenceSequenceIndex,
+    propsPinnedColumns,
+    pinnedColumns,
+    propsOtherVisibleColumns,
+    otherVisibleColumns,
+    propsCollapsedGroups,
+    collapsedGroups,
     propsSortBy,
     sortBy,
     sortedIndices,
@@ -677,46 +644,56 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     positionsToStyle,
     propsAlignmentColorPalette, 
     alignmentColorPalette,
-    propsAlignmentColorMode,
-    alignmentColorMode,
+    propsDarkMode,
+    darkMode,
     maxMinimapWidth,
     maxMinimapHeight,
     onBusy,
     onGroupsChanged,
   ])
 
-  const sortedDisplayedIndices: number[] = useMemo(() => {
+  const [sortedDisplayedIndices, isCollapsedGroup]: [number[], boolean[]] = useMemo(() => {
     if (alignment?.groupBy === undefined) {
-      return [...sortedIndices]
+      return [[...sortedIndices], Array(sortedIndices.length).fill(false)]
     }
 
     const sortedDisplayedIndices: number[] = []
+    const isCollapsedGroup: boolean[] = []
     const shouldDisplay: boolean[] = new Array(alignment.groups.length).fill(true)
     for (const sequenceIndex of sortedIndices) {
-      const groupIndex = alignment.sequences[sequenceIndex].__groupIndex__
-      if (collapsedGroups.includes(groupIndex)) {
-        if (shouldDisplay[groupIndex]) {
-          sortedDisplayedIndices.push(sequenceIndex)
-          shouldDisplay[groupIndex] = false
-        }
-      } else {
+      const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
+      if (shouldDisplay[groupIndex]) {
         sortedDisplayedIndices.push(sequenceIndex)
+        if (collapsedGroups.includes(groupIndex)) {
+          shouldDisplay[groupIndex] = false
+          isCollapsedGroup.push(true)
+        } else {
+          isCollapsedGroup.push(false)
+        }
       }
     }
-    return sortedDisplayedIndices
+    return [sortedDisplayedIndices, isCollapsedGroup]
   }, [
     sortedIndices, 
     collapsedGroups, 
     alignment?.groupBy,
-    alignment?.sequences, 
+    alignment?.annotations.__groupIndex__, 
     alignment?.groups.length
   ])
 
   const {
     s2DataCfg, 
     firstResidueColIndex, 
-    firstSequenceRowIndex
-  } = useS2DataCfg(alignment, sortedDisplayedIndices, columns, isOverviewMode)
+    firstSequenceRowIndex,
+    groupSizeAtRowIndex,
+    isCollapsedGroupAtRowIndex,
+  } = useS2DataCfg(alignment, sortedDisplayedIndices, isCollapsedGroup, columns, isOverviewMode)
+  // useChangeDetector()
+  // useChangeDetector("s2DataCfg changed", s2DataCfg)
+  // useChangeDetector("- alignment changed", alignment)
+  // useChangeDetector("- sortedDisplayedIndices changed", sortedDisplayedIndices)
+  // useChangeDetector("- columns changed", columns)
+  // useChangeDetector("- isOverviewMode changed", isOverviewMode)
 
   const rowHeightsByField = useMemo(() => {
     // side effect, work around a bug in antv/s2 re merging options
@@ -734,7 +711,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
 
     if (alignment?.groupBy !== undefined) {
       for (const sequenceIndex of sortedDisplayedIndices) {
-        const groupIndex = alignment.sequences[sequenceIndex].__groupIndex__
+        const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
         if (collapsedGroups.includes(groupIndex)) {
           heights[`${i}`] = Math.ceil(SEQUENCE_LOGO_ROW_HEIGHT_RATIO * dimensions.rowHeight) + dimensions.paddingTop + dimensions.paddingBottom
         }
@@ -748,7 +725,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     collapsedGroups, 
     sortedDisplayedIndices,
     alignment?.groupBy, 
-    alignment?.sequences,
+    alignment?.annotations.__groupIndex__,
     dimensions,
   ])
 
@@ -757,7 +734,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     alignmentUuid: alignment?.uuid,
     fieldWidths: {},
     isGrouped: (alignment?.groupBy !== undefined),
-    isResizing: false,
+    isResizing: undefined,
     zoom,
   })
 
@@ -769,38 +746,43 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     columnWidthsRef,
     pinnedColumnsCount,
     sortBy,
-    collapsedGroups,
+    isCollapsedGroupAtRowIndex,
     isOverviewMode,
     window.devicePixelRatio,
     dimensions, 
-    iconSize, 
-    iconMarginLeft, 
-    iconMarginRight,
     scrollbarSize,
     showMinimap, 
     rowHeightsByField, 
     highlightCurrentSequence, 
-    handleSortActionIconClick, 
+    handleColHeaderActionIconClick, 
   )
+  // useChangeDetector()
+  // useChangeDetector("s2Options changed", s2Options)
+  // useChangeDetector("- alignment changed", alignment)
+  // useChangeDetector("- columns changed", columns)
+  // useChangeDetector("- columnWidthsRef changed", columnWidthsRef)
+  // useChangeDetector("- pinnedColumnsCount changed", pinnedColumnsCount)
+  // useChangeDetector("- sortBy changed", sortBy)
+  // useChangeDetector("- collapsedGroups changed", collapsedGroups)
+  // useChangeDetector("- isOverviewMode changed", isOverviewMode)
+  // useChangeDetector("- dimensions changed", dimensions)
+  // useChangeDetector("- scrollbarSize changed", scrollbarSize)
+  // useChangeDetector("- showMinimap changed", showMinimap)
+  // useChangeDetector("- rowHeightsByField changed", rowHeightsByField)
+  // useChangeDetector("- highlightCurrentSequence changed", highlightCurrentSequence)
+  // useChangeDetector("- handleColHeaderActionIconClick changed", handleColHeaderActionIconClick)
   
   const sequenceLogosCommonProps = useMemo(() => {
     const logoHeight = rowHeightsByField[`${Object.keys(SPECIAL_ROWS).indexOf("$$sequence logo$$")}`] - dimensions.paddingTop - dimensions.paddingBottom
-    let compareToSequence: string = ""
-    switch (positionsToStyle) {
-      case "sameAsReference":
-      case "differentFromReference":
-        compareToSequence = alignment?.referenceSequence?.sequence ?? ""
-        break
-      case "sameAsConsensus":
-      case "differentFromConsensus":
-        compareToSequence = alignment?.consensusSequence?.sequence ?? ""
-        break
-      default:
-        compareToSequence = ""
+    const barMode = (zoom < SEQUENCE_LOGO_BAR_STACK_ZOOM)
+    let colorPalette
+    if (barMode) {
+      colorPalette = darkMode ? alignmentColorPalette["Dark"] : alignmentColorPalette["Light"]
+    } else {
+      colorPalette = darkMode ? alignmentColorPalette["Light"] : alignmentColorPalette["Dark"]
     }
 
     return {
-      alphabet: alignment?.alphabet ?? "",
       width: dimensions.residueWidth,
       height: logoHeight,
       fontSize: dimensions.fontSize,
@@ -808,40 +790,43 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       fontWidth: dimensions.residueFontWidth,
       fontActualBoundingBoxAscents: dimensions.residueFontActualBoundingBoxAscents,
       fontActualBoundingBoxDescents: dimensions.residueFontActualBoundingBoxDescents,
-      colorPalette: (alignmentColorMode === "Dark") ? alignmentColorPalette["Light"] : alignmentColorPalette["Dark"],
+      barMode,
+      colorPalette,
       defaultTextColor: colorTheme.text, 
-      backgroundColor: colorTheme.backgroundAlt,
-      compareToSequence,
+      referenceSequence: alignment?.sequences[alignment?.referenceSequenceIndex] ?? "",
+      consensusSequence: alignment?.positionalAnnotations.consensus ?? "",
       positionsToStyle: positionsToStyle,
+      alphabetToPssmIndex: alignment?.alphabetToPssmIndex ?? {},
     }
   }, [
-    alignment?.alphabet,
-    alignment?.referenceSequence,
-    alignment?.consensusSequence,
+    zoom,
+    alignment?.alphabetToPssmIndex,
+    alignment?.sequences,
+    alignment?.referenceSequenceIndex,
+    alignment?.positionalAnnotations.consensus,
     dimensions, 
     colorTheme.text, 
-    colorTheme.backgroundAlt,
     alignmentColorPalette, 
-    alignmentColorMode, 
+    darkMode,
     positionsToStyle, 
     residueFontFamily, 
     rowHeightsByField,
   ])
   
   const dpr = window.devicePixelRatio
-  const capacity = 2000
+  const capacity = 10000
   const offscreenCanvasPool = useMemo(() => {
     const { width, height } = sequenceLogosCommonProps
     const pool = new ObjectPool(
-      () => (new OffscreenCanvas(width * dpr, height * dpr))
+      () => (new OffscreenCanvas(width * dpr, height * dpr)),
+      capacity,
     )
-    pool.allocate(capacity)
     return pool
   }, [sequenceLogosCommonProps, dpr, capacity])
 
   const sequenceLogos = useSequenceLogos({
     offscreenCanvasPool,
-    pssmOrGroups: alignment?.pssm,
+    pssmOrGroups: alignment?.positionalAnnotations.pssm,
     ...sequenceLogosCommonProps,
   })
 
@@ -861,12 +846,10 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       font: `${dimensions.fontSize}px ${residueFontFamily}`,
       fontActualBoundingBoxAscents: dimensions.residueFontActualBoundingBoxAscents,
       fontActualBoundingBoxDescents: dimensions.residueFontActualBoundingBoxDescents,
-      // textColor: alignmentColorMode === "Letter Only" ? alignmentColorPalette["Dark"] : colorTheme.text,
-      textColor: alignmentColorMode === "Dark" ? alignmentColorPalette["Light"] : alignmentColorPalette["Dark"],
+      textColor: darkMode ? alignmentColorPalette["Light"] : alignmentColorPalette["Dark"],
       defaultTextColor: colorTheme.text,
-      // backgroundColor: alignmentColorMode === "Letter Only" ? colorTheme.background : alignmentColorPalette["Light"],
-      backgroundColor: (alignmentColorMode === "Letter Only") ? colorTheme.background : (alignmentColorMode === "Light") ? alignmentColorPalette["Light"] : alignmentColorPalette["Dark"],
-      defaultBackgroundColor: colorTheme.background,
+      mutedTextColor: colorTheme.headerBorder,
+      backgroundColor: (alignmentColorMode === "Letter Only") ? undefined : darkMode ? alignmentColorPalette["Dark"] : alignmentColorPalette["Light"],
       isOverviewMode,
     })
   }, [
@@ -875,26 +858,27 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     dimensions, 
     residueFontFamily, 
     colorTheme.text, 
-    colorTheme.background, 
+    colorTheme.headerBorder,
     alignmentColorPalette, 
     alignmentColorMode, 
+    darkMode,
     isOverviewMode
   ])
 
   const barSprites = useMemo(() => {
-    const maxBarHeight = rowHeightsByField[`${Object.keys(SPECIAL_ROWS).indexOf("$$coverage$$")}`] - dimensions.paddingTop - dimensions.paddingBottom
+    // const maxBarHeight = rowHeightsByField[`${Object.keys(SPECIAL_ROWS).indexOf("$$coverage$$")}`] - dimensions.paddingTop - dimensions.paddingBottom
+    const maxBarHeight = SPECIAL_ROWS["$$coverage$$"].height * dimensions.rowHeight
     return new BarSprites({
       width: dimensions.residueFontWidth,
       height: maxBarHeight,
       barColor: "#9da7b6", // this.spreadsheet.theme.dataCell.text.fill
-      backgroundColor: colorTheme.background,
     })
   }, [
-    rowHeightsByField, 
-    dimensions.paddingTop, 
-    dimensions.paddingBottom, 
+    // rowHeightsByField, 
+    dimensions.rowHeight,
+    // dimensions.paddingTop, 
+    // dimensions.paddingBottom, 
     dimensions.residueFontWidth, 
-    colorTheme.background
   ])
 
   const avExtraOptions: TAVExtraOptions = useMemo(() => ({
@@ -905,12 +889,15 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     alignmentColorMode, 
     alignmentColorPalette, 
     positionsToStyle, 
+    hideUnstyledPositions,
     sprites, 
     alignment, 
     collapsedGroups,
     sortedDisplayedIndices, 
     firstSequenceRowIndex, 
     firstResidueColIndex, 
+    groupSizeAtRowIndex,
+    isCollapsedGroupAtRowIndex,
     overviewImageData, 
     showMinimap, 
     minimapImage, 
@@ -918,10 +905,6 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     sequenceLogosGroups, 
     barSprites, 
     scrollbarSize,
-    visibleSequencePositionStart: -1,
-    visibleSequencePositionEnd: -1,
-    visibleSequenceIndexStart: -1,
-    visibleSequenceIndexEnd: -1,
   }), [
     zoom, 
     isOverviewMode, 
@@ -930,12 +913,15 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     alignmentColorMode, 
     alignmentColorPalette, 
     positionsToStyle, 
+    hideUnstyledPositions,
     sprites, 
     alignment, 
     collapsedGroups,
     sortedDisplayedIndices, 
     firstSequenceRowIndex, 
     firstResidueColIndex, 
+    groupSizeAtRowIndex,
+    isCollapsedGroupAtRowIndex,
     overviewImageData, 
     showMinimap, 
     minimapImage, 
@@ -944,27 +930,35 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     barSprites, 
     scrollbarSize, 
   ])
-  
-  
-  /*
-  useMemo(() => {
-    // console.log("initAVStore")
-    initAVStore(s2Ref.current)
-  }, [initAVStore, s2Ref])
-  */
 
-  // const [, forceUpdate] = useState({})
-  // useEffect(() => {
-  //   // console.log("s2Ref changed", s2Ref.current?.id)
-  //   window.s2 = s2Ref.current
-  //   updateAVStore()
-  //   // forceUpdate({})
-  // }, [s2Ref, updateAVStore, forceUpdate])
+  // useChangeDetector()
+  // useChangeDetector("avExtraOptions changed", avExtraOptions)
+  // useChangeDetector("- zoom changed", zoom)
+  // useChangeDetector("- isOverviewMode changed", isOverviewMode)
+  // useChangeDetector("- residueFontFamily changed", residueFontFamily)
+  // useChangeDetector("- dimensions changed", dimensions)
+  // useChangeDetector("- alignmentColorMode changed", alignmentColorMode)
+  // useChangeDetector("- alignmentColorPalette changed", alignmentColorPalette)
+  // useChangeDetector("- positionsToStyle changed", positionsToStyle)
+  // useChangeDetector("- hideUnstyledPositions changed", hideUnstyledPositions)
+  // useChangeDetector("- sprites changed", sprites)
+  // useChangeDetector("- alignment changed", alignment)
+  // useChangeDetector("- collapsedGroups changed", collapsedGroups)
+  // useChangeDetector("- sortedDisplayedIndices changed", sortedDisplayedIndices)
+  // useChangeDetector("- firstSequenceRowIndex changed", firstSequenceRowIndex)
+  // useChangeDetector("- firstResidueColIndex changed", firstResidueColIndex)
+  // useChangeDetector("- overviewImageData changed", overviewImageData)
+  // useChangeDetector("- showMinimap changed", showMinimap)
+  // useChangeDetector("- minimapImage changed", minimapImage)
+  // useChangeDetector("- sequenceLogos changed", sequenceLogos)
+  // useChangeDetector("- sequenceLogosGroups changed", sequenceLogosGroups)
+  // useChangeDetector("- barSprites changed", barSprites)
+  // useChangeDetector("- scrollbarSize changed", scrollbarSize)
 
   const handleCellIconClick = useCallback(({ event, target, viewMeta, iconName }: TAVMouseEventInfo) => {
-    if (!alignment?.sequences) {
-      return
-    }
+    // if (!alignment?.annotations) {
+    //   return
+    // }
 
     if ((target.cellType === CellTypes.COL_CELL) && (viewMeta.field === SERIES_NUMBER_FIELD)) {
       onExpandCollapseAllGroupsIconClick?.()
@@ -973,26 +967,28 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       if (i < 0) {
         return
       }
-      const groupIndex = alignment.sequences[sortedDisplayedIndices[i]].__groupIndex__
-      onExpandCollapseGroupIconClick?.(groupIndex)
+      const groupIndex = alignment?.annotations.__groupIndex__[sortedDisplayedIndices[i]]
+      if (groupIndex !== undefined) {
+        onExpandCollapseGroupIconClick?.(groupIndex)
+      }
     }
   }, [
     firstSequenceRowIndex,
     sortedDisplayedIndices,
-    alignment?.sequences,
+    alignment?.annotations.__groupIndex__,
     onExpandCollapseAllGroupsIconClick,
     onExpandCollapseGroupIconClick
   ])
 
   const handleMounted = useCallback((s2: SpreadSheet) => {
-    // console.log("mounted", s2?.id)
+    // console.log("mounted", (s2 as AVTableSheet).id)
     // initAVStore(s2 as AVTableSheet)
     // (s2 as AVTableSheet).updateAVStore(avExtraOptions)
     window.s2 = s2
   }, [/*avExtraOptions, initAVStore*/])
 
   const handleLayoutResizeColWidth = useCallback((params: ResizeParams) => {
-    columnWidthsRef.current.isResizing = true
+    columnWidthsRef.current.isResizing = params.info.meta.field
   }, [])
 
   const handleLayoutAfterHeaderLayout = useCallback((layoutResult: LayoutResult) => {
@@ -1001,7 +997,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       return
     }
 
-    columnWidthsRef.current.isResizing = false
+    columnWidthsRef.current.isResizing = undefined
     columnWidthsRef.current.isGrouped = (alignment?.groupBy !== undefined)
     columnWidthsRef.current.zoom = zoom
     if (columnWidthsRef.current.alignmentUuid !== alignment.uuid) {
@@ -1015,11 +1011,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   }, [alignment?.uuid, alignment?.groupBy, zoom])
 
   const handleDataCellHover = useCallback((data: TargetCellInfo): void => {
-    if (!onMouseHover) {
-      return
-    }
-    const { contextualInfo } = getAVMouseEventInfo(data)
-    onMouseHover(contextualInfo)
+    onMouseHover?.(getAVMouseEventInfo(data))
   }, [onMouseHover])
 
   const handleNoContextualInfo = useCallback(() => {
@@ -1060,57 +1052,31 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   }, [handleCellIconClick])
 
   const handleContextMenu = useCallback((event: CanvasEvent) => {
-    if (!alignment?.sequences) {
-      return 
-    }
-
-    // const { event, target, viewMeta, iconName } = getTargetCellInfo(data)
-    // console.log(event)
-    // getTargetCellInfo(event)
     const target = s2Ref.current?.getCell(event.target) as S2CellType
     const viewMeta = target?.getMeta() as S2Node
     const info = getAVMouseEventInfo({ event, target, viewMeta })
-    // const contextualInfo = info.contextualInfo
-    // const data = alignment.sequences[contextualInfo?.sequenceIndex]
-
-    // if ((viewMeta?.valueField === "__sequenceIndex__") && (viewMeta?.fieldValue === "$$overview$$")) {
-    //   // console.log(event.y, scrollY, viewMeta.y, dimensions.colHeight)
-    //   const facet = s2Ref.current?.facet
-    //   if (facet) {
-    //     const { scrollX = 0, scrollY = 0 } = facet.getScrollOffset()
-    //     const row = Math.floor((event.y - facet?.columnHeader.getBBox().height + scrollY - viewMeta.y) / dimensions.residueHeight)
-    //     const sequenceIndex = sortedDisplayedIndices[row]
-    //     data = alignment.sequences[sequenceIndex]
-    //   }
-    // } else {
-    //   data = s2Ref.current?.dataSet.getCellData({
-    //     query: {
-    //       rowIndex: viewMeta?.rowIndex
-    //     }
-    //   })  
-    // }
     onContextMenu?.(info)
   }, [
     s2Ref, 
-    alignment?.sequences, 
-    // dimensions, 
-    // sortedDisplayedIndices, 
     onContextMenu
   ])
 
   const handleSelected = useCallback((cells: S2CellType[]) => {
-    s2Ref.current?.interaction.reset()
-  }, [s2Ref])
+    // console.log("viewer", cells.length, cells[0].cellType)
+    // s2Ref.current?.interaction.reset()
+    // s2Ref.current?.interaction.removeIntercepts([InterceptType.HOVER])
+  }, [])
 
-  const handleBeforeRender = useCallback(() => {
-    // console.log("***before render***")
-    onBusy?.(true)
-  }, [onBusy])
 
-  const handleAfterRender = useCallback(() => {
-    // console.log("***after render***")
-    onBusy?.(false)
-  }, [onBusy])
+  // const handleBeforeRender = useCallback(() => {
+  //   // console.log("***before render***")
+  //   onBusy?.(true)
+  // }, [onBusy])
+
+  // const handleAfterRender = useCallback(() => {
+  //   // console.log("***after render***")
+  //   onBusy?.(false)
+  // }, [onBusy])
 
   const handleDestroy = useCallback(() => {
     console.log("destroy")
@@ -1139,7 +1105,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     return (
       <SheetComponent
         ref={s2Ref}
-        sheetType="table" // 此处指定sheetType为editable
+        sheetType="table" // "table" or "editable"
         spreadsheet={spreadsheet}
         dataCfg={s2DataCfg}
         options={s2Options}
@@ -1164,12 +1130,14 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
         onDataCellHover={handleDataCellHover}
         onCornerCellHover={handleNoContextualInfo}
         onSelected={handleSelected}
-        onBeforeRender={handleBeforeRender}
-        onAfterRender={handleAfterRender}
+        // onBeforeRender={handleBeforeRender}
+        // onAfterRender={handleAfterRender}
         onMounted={handleMounted}
-        onDestroy={handleDestroy}
+        // onDestroy={handleDestroy}
         onLayoutAfterHeaderLayout={handleLayoutAfterHeaderLayout}
         onLayoutResizeColWidth={handleLayoutResizeColWidth}
+        onCopied={(data) => {console.log(data)}}
+        onDataCellEditEnd={(meta) => {console.log('onDataCellEditEnd', meta)}}
       />
     )
   }, [
@@ -1189,10 +1157,10 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     handleDataCellHover,
     handleNoContextualInfo,
     handleSelected,
-    handleBeforeRender,
-    handleAfterRender,
+    // handleBeforeRender,
+    // handleAfterRender,
     handleMounted,
-    handleDestroy,
+    // handleDestroy,
     handleLayoutAfterHeaderLayout,
     handleLayoutResizeColWidth,
   ])

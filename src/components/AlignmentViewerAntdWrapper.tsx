@@ -1,18 +1,17 @@
-import type { TAlignmentViewerProps, TAVColorTheme } from './AlignmentViewer'
+import type { TAlignmentViewerProps, TAVColorTheme } from '../lib/types'
 
 import { theme as antdTheme } from 'antd'
 import { useMemo } from 'react'
 
 import AlignmentViewer from './AlignmentViewer'
 
-export default function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerProps, "colorTheme"> & {darkMode: boolean}) {
-  const { darkMode, ...otherProps } = props
+export default function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerProps, "colorTheme">) {
   const antdThemeToken = antdTheme.useToken().token
   const colorTheme: TAVColorTheme = useMemo(() => (
-    darkMode ? {
+    props.darkMode ? {
       headerText: antdThemeToken.colorText, // '#BAC1CC', 
       backgroundAlt: '#151617', 
-      backgroundOnHover: '#3F4349', 
+      backgroundOnHover: antdThemeToken.colorPrimary, //'#3F4349', 
       headerBackground: '#1F2124', 
       headerBackgroundOnHover: '#3F4349', 
       selectionMask: '#3F4349', 
@@ -28,7 +27,7 @@ export default function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerP
     } : {
       headerText: antdThemeToken.colorText, // '#000000', 
       backgroundAlt: '#FAFBFB', 
-      backgroundOnHover: '#F0F2F4', 
+      backgroundOnHover: antdThemeToken.colorPrimary, //'#F0F2F4', 
       headerBackground: '#F0F2F4', 
       headerBackgroundOnHover: '#E7E9ED', 
       selectionMask: '#6E757F', 
@@ -42,6 +41,12 @@ export default function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerP
       text: antdThemeToken.colorText, //'#000000', 
       borderOnHover: '#858E9B', 
     }
-  ), [darkMode, antdThemeToken.colorBgLayout, antdThemeToken.colorLink, antdThemeToken.colorText])
-  return <AlignmentViewer {...otherProps} colorTheme={colorTheme} />
+  ), [
+    props.darkMode, 
+    antdThemeToken.colorBgLayout, 
+    antdThemeToken.colorLink, 
+    antdThemeToken.colorText, 
+    antdThemeToken.colorPrimary
+  ])
+  return <AlignmentViewer {...props} colorTheme={colorTheme} />
 }

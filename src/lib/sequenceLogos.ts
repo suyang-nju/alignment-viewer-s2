@@ -1,37 +1,13 @@
-import type { TColorEntry } from "./AlignmentColorSchema"
-import type { TPssm, TSequenceGroup, TAlignmentPositionsToStyle } from "./Alignment"
-import type { ObjectPool } from "./objectPool"
+import type {
+  TSequenceLogos,
+  TUseSequenceLogosProps,
+} from './types'
 
+import { shouldBeStyledFactory } from './alignment'
 import { LRUMap } from "./lru"
 
 import { useCallback, useMemo } from "react"
 import { isArray } from "lodash"
-
-type TSequenceLogosParams = {
-  alphabet: string,
-  width: number,
-  height: number,
-  fontSize: number,
-  fontFamily: string,
-  fontWidth: number,
-  fontActualBoundingBoxAscents: number[],
-  fontActualBoundingBoxDescents: number[],
-  colorPalette: Map<string, TColorEntry>,
-  defaultTextColor: string, 
-  backgroundColor: string,
-  compareToSequence: string,
-  positionsToStyle: TAlignmentPositionsToStyle,
-}
-
-type TUseSequenceLogosProps = TSequenceLogosParams & {
-  pssmOrGroups?: TPssm | TSequenceGroup[],
-  offscreenCanvasPool: ObjectPool<OffscreenCanvas>,
-}
-
-export type TSequenceLogos = undefined | {
-  props: TUseSequenceLogosProps,
-  get: (sequencePosition: number, groupIndex?: number) => OffscreenCanvas | undefined,
-}
 
 export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos {
   const groups = useMemo(() => {
@@ -51,7 +27,6 @@ export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos 
 
   const {
     offscreenCanvasPool,
-    alphabet,
     width, 
     height, 
     fontSize, 
@@ -59,17 +34,26 @@ export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos 
     fontWidth,
     fontActualBoundingBoxAscents, 
     fontActualBoundingBoxDescents,
+    barMode = false,
     colorPalette, 
     defaultTextColor,
-    backgroundColor,
-    compareToSequence, 
+    referenceSequence,
+    consensusSequence, 
     positionsToStyle, 
+    alphabetToPssmIndex,
   } = props
 
   const capacity = offscreenCanvasPool.capacity()
   const logosCache = useMemo(() => (
     new LRUMap<number, OffscreenCanvas>(capacity)
   ), [capacity])
+
+  const shouldBeStyled = shouldBeStyledFactory(
+    positionsToStyle,
+    referenceSequence,
+    consensusSequence,
+    alphabetToPssmIndex,
+  )
   
   const getLogo = useCallback((sequencePosition: number, groupIndex: number = 0) => {
     const dpr = window.devicePixelRatio
@@ -80,10 +64,9 @@ export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos 
       return logo
     }
 
-    if (logosCache.size === capacity) {
+    logo = offscreenCanvasPool.take()
+    if (!logo) {
       [, logo] = logosCache.shift()
-    } else {
-      logo = offscreenCanvasPool.take()
     }
 
     if (!logo) {
@@ -95,46 +78,78 @@ export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos 
       offscreenCanvasPool.release(logo)
       return undefined
     }
-    ctx.imageSmoothingEnabled = true
-    // ctx.textRendering = "optimizeSpeed"
-    ctx.font = `${fontSize}px ${fontFamily}`
 
-    ctx.fillStyle = backgroundColor
     ctx.resetTransform()
-    ctx.fillRect(0, 0, width * dpr, height * dpr)
-    
-    const indexingOffset = sequencePosition * pssm.numSymbols
-    let y = height
-    const x = dpr * (width - fontWidth)/2
-    for (let i = 0; i < pssm.numSymbols; ++i) {
-      const j = pssm.sortedIndices[indexingOffset + i]
-      if (j === pssm.numSymbols - 1) { // gap
-        continue
-      }
+    ctx.clearRect(0, 0, width * dpr, height * dpr)
 
-      const percentage = pssm.values[indexingOffset + j]
-      if (percentage <= 0) {
-        continue
-      }
+    if (barMode) {
+      ctx.imageSmoothingEnabled = false
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-      if (
-        (((positionsToStyle === "sameAsReference") || (positionsToStyle === "sameAsConsensus")) && (alphabet[j] !== compareToSequence[sequencePosition])) ||
-        (((positionsToStyle === "differentFromReference") || (positionsToStyle === "differentFromConsensus")) && (alphabet[j] === compareToSequence[sequencePosition]))
-      ) {
-        continue
+      const indexingOffset = sequencePosition * pssm.alphabet.length
+      let y = height
+      const x = (width - fontWidth)/2
+      for (let i = 0; i < pssm.alphabet.length; ++i) {
+        const j = pssm.sortedIndices[indexingOffset + i]
+        if (j === pssm.gapIndex) {
+          continue
+        }
+  
+        const percentage = pssm.values[indexingOffset + j]
+        // percentage === -1 if truely 0%
+        // percentage === 0 if < 0.5% (rounded to 0%)
+        if (percentage <= 0) {
+          continue
+        }
+  
+        const char = pssm.alphabet[j]
+        if (!shouldBeStyled(char, sequencePosition)) {
+          continue
+        }
+        
+        const letterHeight = height * percentage / 100
+        ctx.fillStyle = colorPalette.get(char)?.color ?? defaultTextColor
+        y -= letterHeight
+        ctx.fillRect(x, y, fontWidth, letterHeight)
       }
-      
-      const letterHeight = height * percentage / 100
-      ctx.fillStyle = colorPalette.get(alphabet[j])?.color ?? defaultTextColor
-      const paddingBottom = 5 / letterHeight
-      // const paddingBottom = 2 / Math.sqrt(letterHeight)
-      // const k = 1/256
-      // const paddingBottom = (Math.sqrt(letterHeight * letterHeight + 2 * k) - letterHeight) / k
-      const scaleY = letterHeight / (fontActualBoundingBoxAscents[j] + fontActualBoundingBoxDescents[j] + paddingBottom)
-      y -= scaleY * (fontActualBoundingBoxDescents[j] + paddingBottom)
-      ctx.setTransform(dpr, 0, 0, dpr * scaleY, x, y * dpr)
-      ctx.fillText(alphabet[j], 0, 0)
-      y -= scaleY * fontActualBoundingBoxAscents[j]  
+    } else {
+      ctx.imageSmoothingEnabled = true
+      // ctx.textRendering = "optimizeSpeed"
+      ctx.font = `${fontSize}px ${fontFamily}`
+  
+      const indexingOffset = sequencePosition * pssm.alphabet.length
+      let y = height
+      const x = dpr * (width - fontWidth)/2
+      for (let i = 0; i < pssm.alphabet.length; ++i) {
+        const j = pssm.sortedIndices[indexingOffset + i]
+        if (j === pssm.gapIndex) {
+          continue
+        }
+  
+        const percentage = pssm.values[indexingOffset + j]
+        // percentage === -1 if truely 0%
+        // percentage === 0 if < 0.5% (rounded to 0%)
+        if (percentage <= 0) {
+          continue
+        }
+  
+        const char = pssm.alphabet[j]
+        if (!shouldBeStyled(char, sequencePosition)) {
+          continue
+        }
+        
+        const letterHeight = height * percentage / 100
+        ctx.fillStyle = colorPalette.get(char)?.color ?? defaultTextColor
+        const paddingBottom = 5 / letterHeight
+        // const paddingBottom = 2 / Math.sqrt(letterHeight)
+        // const k = 1/256
+        // const paddingBottom = (Math.sqrt(letterHeight * letterHeight + 2 * k) - letterHeight) / k
+        const scaleY = letterHeight / (fontActualBoundingBoxAscents[char] + fontActualBoundingBoxDescents[char] + paddingBottom)
+        y -= scaleY * (fontActualBoundingBoxDescents[char] + paddingBottom)
+        ctx.setTransform(dpr, 0, 0, dpr * scaleY, x, y * dpr)
+        ctx.fillText(char, 0, 0)
+        y -= scaleY * fontActualBoundingBoxAscents[char]  
+      }
     }
 
     logosCache.set(key, logo)
@@ -142,21 +157,18 @@ export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos 
   }, [
     groups, 
     offscreenCanvasPool,
-    capacity,
     logosCache,
     width, 
     height, 
-    alphabet,
     fontSize, 
     fontFamily, 
     fontWidth,
     fontActualBoundingBoxAscents, 
     fontActualBoundingBoxDescents,
+    barMode,
     colorPalette, 
     defaultTextColor,
-    backgroundColor,
-    compareToSequence, 
-    positionsToStyle, 
+    shouldBeStyled, 
   ])
 
   useMemo(() => {

@@ -1,7 +1,7 @@
-import type { TAlignment, TAlignmentPositionsToStyle } from '../lib/Alignment'
+import type { TAlignment, TAlignmentPositionsToStyle } from '../lib/alignment'
 import type { TAlignmentColorMode, TColorEntry, TAlignmentColorPalette } from '../lib/AlignmentColorSchema'
 
-import { formatSequence } from '../lib/Alignment'
+import { formatSequence } from '../lib/alignment'
 
 import { expose } from 'threads/worker'
 import { Transfer } from 'threads'

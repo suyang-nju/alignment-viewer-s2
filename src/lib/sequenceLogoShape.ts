@@ -1,8 +1,6 @@
-import { Shape, registerBBox, getBBoxMethod } from '@antv/g-canvas'
-import { isNil, isArray } from 'lodash'
+import type { TColorEntry, TPssm, TAlignmentPositionsToStyle } from "./types"
 
-import type { TColorEntry } from "./AlignmentColorSchema"
-import type { TPssm, TAlignmentPositionsToStyle } from "./Alignment"
+import { Shape, registerBBox, getBBoxMethod } from '@antv/g-canvas'
 
 registerBBox("sequenceLogo", getBBoxMethod("image"))
 

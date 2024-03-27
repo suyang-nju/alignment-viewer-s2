@@ -1,9 +1,4 @@
-export type TBarSpritesProps = {
-  width: number,
-  height: number,
-  barColor: string,
-  backgroundColor: string,
-}
+import type { TBarSpritesProps } from './types'
 
 export default class BarSprites {
   props: TBarSpritesProps
@@ -11,7 +6,7 @@ export default class BarSprites {
   
   constructor(props: TBarSpritesProps) {
     this.props = props
-    this.sprites = Array(this.props.height + 1).fill(undefined)
+    this.sprites = Array(Math.ceil(this.props.height) + 1).fill(undefined)
   }
 
   get(barHeightRatio: number): OffscreenCanvas {
@@ -24,17 +19,15 @@ export default class BarSprites {
       width,
       height,
       barColor,
-      backgroundColor,
     } = this.props
     const dpr = window.devicePixelRatio
     const canvas = new OffscreenCanvas(width * dpr, height * dpr)
     const ctx = canvas.getContext("2d")
     if (ctx) {
-      ctx.fillStyle = barColor
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      ctx.fillStyle = backgroundColor
-      ctx.fillRect(0, 0, canvas.width, canvas.height - key * dpr)
+      ctx.fillStyle = barColor
+      ctx.fillRect(0, canvas.height - key * dpr, canvas.width, key * dpr)
     }
     this.sprites[key] = canvas
     return canvas
