@@ -6,16 +6,12 @@ import type {
   LayoutResult, 
   ResizeParams,
   SpreadSheet, 
-  TableSheet, 
   ViewMeta, 
   S2CellType, 
-  ScrollbarPositionType, 
-  ColHeaderConfig, 
   HeaderIconClickParams, 
-  BaseCell,  
 } from '@antv/s2'
 import type { Event as CanvasEvent } from '@antv/g-canvas'
-import type { SheetComponentOptions, SheetComponentsProps } from '@antv/s2-react'
+import type { SheetComponentOptions } from '@antv/s2-react'
 
 import type {
   TColumnWidths, 
@@ -37,8 +33,7 @@ import {
   useS2DataCfg, 
 } from '../lib/AVTableSheet'
 import {
-  SPECIAL_ROWS,
-  HIDDEN_ANNOTATION_FIELDS, 
+  SPECIAL_ROWS, 
   ALIGNMENT_COLOR_MODES,
   SEQUENCE_LOGO_ROW_HEIGHT_RATIO,
   SEQUENCE_LOGO_BAR_STACK_ZOOM,
@@ -54,8 +49,6 @@ import { spawn, Thread, Worker } from 'threads'
 
 import { useRef, useMemo, useState, useEffect, useCallback, } from 'react'
 import {
-  setLang, 
-  extendLocale,
   Node as S2Node, 
   GuiIcon, 
   SERIES_NUMBER_FIELD, 
@@ -64,20 +57,6 @@ import {
 import { SheetComponent } from '@antv/s2-react'
 import '@antv/s2-react/dist/style.min.css'
 
-
-const locale = {
-  zh_CN: {
-    // test: '测试',
-  },
-  en_US: {
-    升序: 'Asdending',
-    降序: 'Descending',
-    不排序: 'Do not sort',
-    序号: ' ',
-  },
-}
-extendLocale(locale)
-setLang("en_US")
 
 declare global {
   interface Window {
@@ -849,7 +828,11 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       textColor: darkMode ? alignmentColorPalette["Light"] : alignmentColorPalette["Dark"],
       defaultTextColor: colorTheme.text,
       mutedTextColor: colorTheme.headerBorder,
-      backgroundColor: (alignmentColorMode === "Letter Only") ? undefined : darkMode ? alignmentColorPalette["Dark"] : alignmentColorPalette["Light"],
+      backgroundColor: ((alignmentColorMode === "Letter Only") && !isOverviewMode) 
+        ? undefined 
+        : darkMode 
+        ? alignmentColorPalette["Dark"] 
+        : alignmentColorPalette["Light"],
       isOverviewMode,
     })
   }, [
@@ -984,7 +967,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     // console.log("mounted", (s2 as AVTableSheet).id)
     // initAVStore(s2 as AVTableSheet)
     // (s2 as AVTableSheet).updateAVStore(avExtraOptions)
-    window.s2 = s2
+    window.s2 = s2 as unknown as AVTableSheet
   }, [/*avExtraOptions, initAVStore*/])
 
   const handleLayoutResizeColWidth = useCallback((params: ResizeParams) => {
@@ -1061,12 +1044,11 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     onContextMenu
   ])
 
-  const handleSelected = useCallback((cells: S2CellType[]) => {
-    // console.log("viewer", cells.length, cells[0].cellType)
-    // s2Ref.current?.interaction.reset()
-    // s2Ref.current?.interaction.removeIntercepts([InterceptType.HOVER])
-  }, [])
-
+  // const handleSelected = useCallback((cells: S2CellType[]) => {
+  //   // console.log("viewer", cells.length, cells[0].cellType)
+  //   // s2Ref.current?.interaction.reset()
+  //   // s2Ref.current?.interaction.removeIntercepts([InterceptType.HOVER])
+  // }, [])
 
   // const handleBeforeRender = useCallback(() => {
   //   // console.log("***before render***")
@@ -1078,9 +1060,9 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   //   onBusy?.(false)
   // }, [onBusy])
 
-  const handleDestroy = useCallback(() => {
-    console.log("destroy")
-  }, [])
+  // const handleDestroy = useCallback(() => {
+  //   console.log("destroy")
+  // }, [])
 
   const adaptiveProp = useMemo(() => {
     if (adaptiveContainerRef?.current) {
@@ -1129,7 +1111,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
         onContextMenu={handleContextMenu}
         onDataCellHover={handleDataCellHover}
         onCornerCellHover={handleNoContextualInfo}
-        onSelected={handleSelected}
+        // onSelected={handleSelected}
         // onBeforeRender={handleBeforeRender}
         // onAfterRender={handleAfterRender}
         onMounted={handleMounted}
@@ -1156,7 +1138,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     handleContextMenu,
     handleDataCellHover,
     handleNoContextualInfo,
-    handleSelected,
+    // handleSelected,
     // handleBeforeRender,
     // handleAfterRender,
     handleMounted,

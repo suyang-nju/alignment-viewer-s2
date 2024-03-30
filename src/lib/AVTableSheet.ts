@@ -19,7 +19,7 @@ import type {
 
 import { find, findIndex, countBy, debounce, isNumber, isString, isNil } from 'lodash'
 import { 
-  TableSheet, SERIES_NUMBER_FIELD, 
+  setLang, extendLocale, TableSheet, SERIES_NUMBER_FIELD, 
   TableDataSet, PALETTE_MAP, S2Event, Node as S2Node,
   InterceptType, copyToClipboard, GuiIcon, CopyMIMEType,
   CellTypes, ScrollbarPositionType, InteractionStateName,
@@ -39,6 +39,20 @@ const KEY_FOREGROUND_GROUP_MINIMAP_GROUP = "minimapGroup"
 
 const FOREGROUND_GROUP_SELECTION_MASK_GROUP_Z_INDEX = 11
 const KEY_FOREGROUND_GROUP_SELECTION_MASK_GROUP = "selectionMaskGroup"
+
+const locale = {
+  zh_CN: {
+    // test: '测试',
+  },
+  en_US: {
+    升序: 'Asdending',
+    降序: 'Descending',
+    不排序: 'Do not sort',
+    序号: ' ',
+  },
+}
+extendLocale(locale)
+setLang("en_US")
 
 export class AVDataSet extends TableDataSet {
   declare spreadsheet: AVTableSheet

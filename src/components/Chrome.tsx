@@ -294,30 +294,6 @@ export default function Chrome() {
     sortByColumnsRef.current?.open()
   }
 
-  const handleFileChange = /*useStartSpinning*/((newFile: File) => {
-    if (newFile === file) {
-      return
-    }
-    setIsLoadingAlignment(true)
-    setFile(newFile)
-    if (searchParams.get("url")) {
-      setSearchParams([])
-    }
-  })
-
-  const handleUrlChange = /*useStartSpinning*/((newUrl: string) => {
-    if (newUrl === searchParams.get("url")) {
-      return
-    }
-    setIsLoadingAlignment(true)
-    
-    setSearchParams([["url", newUrl]], { relative: "path" })
-
-    if (file) {
-      setFile(undefined)
-    }
-  })
-
   const handleToggleChange = (item: string, isActive: boolean) => {
     setToggles({...toggles, [item]: {label: toggles[item].label, visible: isActive}})
   }
@@ -367,6 +343,31 @@ export default function Chrome() {
   const [groupCount, setGroupCount] = useState(0)
   const [collapsibleGroups, setCollapsibleGroups] = useState<number[]>([])
   const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
+
+  const handleFileOrUrlChange = /*useStartSpinning*/((newFileOrUrl: File | string) => {
+    if (newFileOrUrl === file) {
+      return
+    }
+    
+    const currentUrl = searchParams.get("url")
+    if (newFileOrUrl === currentUrl) {
+      return
+    }
+
+    setIsLoadingAlignment(true)
+
+    if (newFileOrUrl instanceof File) {
+      setFile(newFileOrUrl)
+      if (currentUrl) {
+        setSearchParams([])
+      }
+    } else {
+      setSearchParams([["url", newFileOrUrl]], { relative: "path" })
+      if (file) {
+        setFile(undefined)
+      }  
+    }
+  })
 
   const handleGroupBy = useCallback((by: string | number | undefined) => {
     if (by === groupBy) {
@@ -666,11 +667,10 @@ export default function Chrome() {
             ) : (
               <Welcome
                 style={{flexGrow: 1}}
-                file={file}
+                fileOrUrl={file || url}
                 isLoading={isLoadingAlignment} // {isLoading}
                 error={error}
-                onFileChange={handleFileChange}
-                onUrlChange={handleUrlChange}
+                onChange={handleFileOrUrlChange}
               />
             )
             }
@@ -685,7 +685,7 @@ export default function Chrome() {
       </Layout>
       <Settings 
         ref={settingsRef} 
-        file={file} 
+        fileOrUrl={file || url} 
         isLoading={isLoadingAlignment} // {isLoading}
         error={error}
         zoom={zoom}
@@ -696,8 +696,7 @@ export default function Chrome() {
         hideUnstyledPositions={hideUnstyledPositions}
         contextualInfoContainer={contextualInfoContainer}
         darkMode={darkMode}
-        onFileChange={handleFileChange}
-        onUrlChange={handleUrlChange}
+        onFileOrUrlChange={handleFileOrUrlChange}
         onZoomChange={handleZoomChange} //{setZoom}
         onTogglesChange={handleToggleChange}
         onColorSchemeChange={handleColorSchemeChange}

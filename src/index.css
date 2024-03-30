@@ -209,3 +209,41 @@ body {
   border-width: var(--ant-line-width);
   background-color: var(--ant-color-bg-layout);
 }
+
+.preview-csv {
+  height: 30vh;
+  overflow: auto;
+  background-color: var(--ant-color-bg-container);
+  border-radius: var(--ant-border-radius);
+  border: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
+}
+
+.preview-csv .highlight {
+  background-color: var(--ant-color-info-bg);
+}
+
+.preview-csv table {
+  border-spacing: 0;
+}
+
+.preview-csv td {
+  white-space: nowrap;
+  padding: var(--ant-padding-xs) var(--ant-padding-sm);
+  border-right: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
+}
+
+.preview-csv th {
+  white-space: nowrap;
+  padding: var(--ant-padding-xs) var(--ant-padding-sm);
+  border-right: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
+  border-bottom: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
+  background-color: var(--ant-color-border-secondary);
+  position: sticky;
+  top: 0;
+}
+
+.preview-csv td:last-child, .preview-csv th:last-child {
+  border-right: none;
+}
+
+

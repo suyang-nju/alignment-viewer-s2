@@ -8,11 +8,10 @@ import AlignmentPicker from './AlignmentPicker'
 export default function Welcome({
   className,
   style,
-  file,
+  fileOrUrl,
   isLoading,
   error,
-  onFileChange,
-  onUrlChange,
+  onChange,
 }: TAlignmentPickerProps) {
   return (
     <Flex vertical align="center" className={className} style={style}>
@@ -26,11 +25,10 @@ export default function Welcome({
         }}
       >
         <AlignmentPicker
-          file={file}
+          fileOrUrl={fileOrUrl}
           isLoading={isLoading}
           error={error}
-          onFileChange={onFileChange}
-          onUrlChange={onUrlChange}
+          onChange={onChange}
         />
       </Card>
     </Flex>

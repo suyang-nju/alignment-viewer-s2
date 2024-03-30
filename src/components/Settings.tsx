@@ -1,6 +1,7 @@
 "use client"
 
-import type { PropsWithChildren, ReactNode } from 'react'
+import type { PropsWithChildren, ReactNode, MouseEvent } from 'react'
+import type { RadioChangeEvent } from 'antd'
 
 import type {
   TSettingsProps,
@@ -34,7 +35,7 @@ function SettingsItem(props: PropsWithChildren) {
 }
 
 export default forwardRef(function Settings({
-  file,
+  fileOrUrl,
   isLoading,
   error,
   zoom,
@@ -45,8 +46,7 @@ export default forwardRef(function Settings({
   hideUnstyledPositions = false,
   contextualInfoContainer = "status bar",
   darkMode = false,
-  onFileChange,
-  onUrlChange,
+  onFileOrUrlChange,
   onZoomChange,
   onTogglesChange,
   onColorSchemeChange,
@@ -67,6 +67,16 @@ export default forwardRef(function Settings({
     setIsVisible(false)
   }
 
+  const handleDarkModeChange = (event: MouseEvent<HTMLElement>) => {
+    event.stopPropagation()
+    onDarkModeChange()
+  }
+
+  const handleContextualInfoContainerChange = (event: RadioChangeEvent) => {
+    event.stopPropagation()
+    onContextualInfoContainerChange(event)
+  }
+
   // const antdThemeToken = antdTheme.useToken().token
   // console.log(antdThemeToken.Tabs?.horizontalItemPadding)
   if (error) {
@@ -81,16 +91,15 @@ export default forwardRef(function Settings({
       onClose={handleClose} 
       open={isVisible}
       mask={true}
-      extra={<Button icon={<Icon component={darkMode ? BsCircleHalf : BsCircleHalf}/>} onClick={onDarkModeChange}>{darkMode ? "Light" : "Dark"}</Button>}
+      extra={<Button icon={<Icon component={darkMode ? BsCircleHalf : BsCircleHalf}/>} onClick={handleDarkModeChange}>{darkMode ? "Light" : "Dark"}</Button>}
     >
       <Flex vertical gap="middle" justify="flex-start" >
         <AlignmentPicker
-          file={file}
+          fileOrUrl={fileOrUrl}
           isLoading={isLoading}
           error={error}
           style={{marginTop: -12}}
-          onFileChange={onFileChange}
-          onUrlChange={onUrlChange}
+          onChange={onFileOrUrlChange}
         />
         <Divider orientation="left" orientationMargin={0} style={{marginBottom: 0}} >Settings</Divider>
         <div className="settings-toggles-grid" >
@@ -188,7 +197,7 @@ export default forwardRef(function Settings({
             buttonStyle="solid"
             size="small"
             name="contextual-info"
-            onChange={onContextualInfoContainerChange}
+            onChange={handleContextualInfoContainerChange}
           />
           {/* <Segmented
             options={["status bar", "tooltip"]}

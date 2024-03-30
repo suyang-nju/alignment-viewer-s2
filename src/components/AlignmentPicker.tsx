@@ -3,7 +3,7 @@ import type { TAlignmentPickerProps } from '../lib/types'
 
 import { Typography, Button, Flex, Space } from 'antd'
 import clsx from 'clsx'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 
 import FileOrUrlPicker from './FileOrUrlPicker'
@@ -19,17 +19,14 @@ const exampleAlignments = [
 ]
 
 export default function AlignmentPicker({
-  file,
+  fileOrUrl,
   isLoading = false,
   error,
   className,
   style,
-  onFileChange,
-  onUrlChange,
+  onChange,
 }: TAlignmentPickerProps) {
-  const [searchParams, ] = useSearchParams()
-  const currentUrl = searchParams.get("url")
-  const [activeTabKey, setActiveTabKey] = useState(currentUrl ? "url" : "file")
+  const [activeTabKey, setActiveTabKey] = useState((typeof fileOrUrl === "string") ? "url" : "file")
 
   const handleTabKeyChange = (activeKey: string) => {
     setActiveTabKey(activeKey)
@@ -48,7 +45,7 @@ export default function AlignmentPicker({
           {
             exampleAlignments.map(
               ({name, url}: {name: string, url: string}) => (
-                <div key={url} className={clsx((url === currentUrl) && "busy-animation")} >
+                <div key={url} className={clsx(isLoading && (url === fileOrUrl) && "busy-animation")} >
                   <Button type="link" size="small" >
                     <Link to={`./?url=${url}`}>{`${name}`}</Link>
                   </Button>
@@ -70,18 +67,15 @@ export default function AlignmentPicker({
         No data will be sent to the server.
       </Typography.Text> */}
       <FileOrUrlPicker
-        file={file}
-        url={currentUrl}
+        fileOrUrl={fileOrUrl}
         extraTabs={tabItems}
         activeTabKey={activeTabKey}
         isLoading={isLoading}
         error={error}
         className={className}
         style={style}
-        onFileChange={onFileChange}
-        onUrlChange={onUrlChange}
+        onChange={onChange}
         onTabKeyChange={handleTabKeyChange}
-      
       />
     </Flex>
   )

@@ -343,23 +343,21 @@ export type TAlignmentViewerProps = {
 }
 
 export type TFileOrUrlPickerProps = {
-  file?: File,
-  url?: string | null,
+  fileOrUrl?: File | string | null,
   extraTabs?: TabsProps["items"],
   activeTabKey?: "file" | "url" | string,
   isLoading: boolean,
   error: unknown,
   className?: string,
   style?: CSSProperties,
-  onFileChange: (file: File) => void,
-  onUrlChange: (url: string) => void,
+  onChange: (fileOrUrl: File | string) => void,
   onTabKeyChange: (activeKey: string) => void,
 }
 
 export type TAlignmentPickerProps = Omit<TFileOrUrlPickerProps, "extraTabs" | "activeTabKey" | "onTabKeyChange">
 
 export type TSettingsProps = {
-  file?: File,
+  fileOrUrl?: File | string | null,
   isLoading: boolean,
   error: unknown,
   zoom: number,
@@ -370,8 +368,7 @@ export type TSettingsProps = {
   hideUnstyledPositions?: boolean,
   contextualInfoContainer?: string,
   darkMode: boolean,
-  onFileChange: (newFile: File) => void,
-  onUrlChange: (newUrl: string) => void,
+  onFileOrUrlChange: (newFileOrUrl: File | string) => void,
   onZoomChange: (newZoom: number) => void,
   onTogglesChange: (item: string, active: boolean) => void,
   onColorSchemeChange: (value: string) => void,

@@ -6,24 +6,25 @@ import type {
 import { Tabs, Input, Upload, Alert } from 'antd'
 
 export default function FileOrUrlPicker({
-  file,
-  url,
+  fileOrUrl,
   activeTabKey = "file",
   extraTabs,
   isLoading = false,
   error,
-  onFileChange,
-  onUrlChange,
+  onChange,
   onTabKeyChange,
 }: TFileOrUrlPickerProps) {
   function handleFileChange(file: File) {
-    onFileChange(file)
+    onChange(file)
     return false
   }
 
   function handleUrlChange(newUrl: string) {
-    onUrlChange(newUrl)
+    onChange(newUrl)
   }
+
+  const isFile = (fileOrUrl instanceof File)
+  const isUrl = (typeof fileOrUrl === "string")
 
   const tabItems: TabsProps["items"] = [
     {
@@ -34,9 +35,8 @@ export default function FileOrUrlPicker({
           <Input.Search 
             id="file" 
             enterButton="Browse" 
-            value={file?.name} 
-            classNames={isLoading && (url === null) && file ? {input: "busy-animation"} : undefined}
-            // loading={isLoading && (url === null) && (!!file)}
+            value={isFile ? fileOrUrl.name : undefined} 
+            classNames={isLoading && isFile ? {input: "busy-animation"} : undefined}
           />
         </Upload>
       )
@@ -47,9 +47,8 @@ export default function FileOrUrlPicker({
         <Input.Search
           id="url" 
           enterButton="Get" 
-          defaultValue={url ?? ""} 
-          classNames={isLoading && (!!url) ? {input: "busy-animation"} : undefined}
-          // loading={isLoading && (!!url)}
+          defaultValue={isUrl ? fileOrUrl : ""} 
+          classNames={isLoading && isUrl ? {input: "busy-animation"} : undefined}
           onSearch={handleUrlChange} 
         />
       )
