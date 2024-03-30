@@ -20,7 +20,9 @@ export default function FileOrUrlPicker({
   }
 
   function handleUrlChange(newUrl: string) {
-    onChange(newUrl)
+    if (newUrl) {
+      onChange(newUrl)
+    }
   }
 
   const isFile = (fileOrUrl instanceof File)

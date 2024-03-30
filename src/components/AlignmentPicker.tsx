@@ -26,7 +26,7 @@ export default function AlignmentPicker({
   style,
   onChange,
 }: TAlignmentPickerProps) {
-  const [activeTabKey, setActiveTabKey] = useState((typeof fileOrUrl === "string") ? "url" : "file")
+  const [activeTabKey, setActiveTabKey] = useState((fileOrUrl && (typeof fileOrUrl === "string")) ? "url" : "file")
 
   const handleTabKeyChange = (activeKey: string) => {
     setActiveTabKey(activeKey)
