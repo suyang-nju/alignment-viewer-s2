@@ -2,7 +2,8 @@ import type {
   TAlignment, 
   TAlignmentPositionsToStyle, 
   TAlignmentSortParams, 
-  TSequenceGroup,
+  TAlignmentAnnotations,
+  TSequenceAnnotationFields,
   TAlignmentColorMode,
   TAlignmentViewerToggles, 
   TContextualInfo, 
@@ -18,9 +19,9 @@ import {
 } from '../lib/constants'
 import { defaultTheme, darkTheme } from '../theme/themeConfig'
 import { alignmentColorSchema } from '../lib/AlignmentColorSchema'
-import { getAlignmentAnnotationFields } from '../lib/alignment'
 import { defaultAlignmentViewerToggles, } from './AlignmentViewer'
 import AlignmentViewerAntdWrapper from './AlignmentViewerAntdWrapper'
+import CursorTracker from './CursorTracker'
 import Settings from './Settings'
 import Welcome from './Welcome'
 import ActionMenuButton from './ActionMenuButton'
@@ -28,10 +29,9 @@ import ArrangeColumns from './ArrangeColumns'
 import SortByColumns from './SortByColumns'
 import ImportAnnotations from './ImportAnnotations'
 import { createContextMenu, createSortMenu, createGroupByMenu, createShowHideColumnsMenu } from '../lib/menu'
+import { getAlignmentAnnotationFields } from '../lib/alignment'
 
-import { debounce, isString } from 'lodash'
-// import useSWRImmutable from 'swr/immutable'
-import useSWR from 'swr'
+import { debounce } from 'lodash'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useState, useEffect, useImperativeHandle, useRef, forwardRef, useMemo, useCallback } from 'react'
 import { 
@@ -40,49 +40,12 @@ import {
 } from 'antd'
 import { MenuOutlined, LoadingOutlined } from '@ant-design/icons'
 import clsx from 'clsx'
-import { spawn, Thread, Worker } from 'threads'
-// const { spawn, Thread, Worker } = require('threads')
-
 
 // eslint-disable-next-line  @typescript-eslint/no-explicit-any
 function BusyIndicator(props: Record<string, any>) {
   return <div className='busy-indicator busy-animation' {...props} />
 }
 
-async function localFetcher(fileOrUrl?:File | string) {
-  // console.log("Begin fetching in localFetcher", Date.now())
-  const worker = new Worker(new URL('../workers/fetchAlignment.ts', import.meta.url), { type: 'module' })
-  const remoteFetcher = await spawn(worker)
-  const alignment = await remoteFetcher(fileOrUrl)
-  await Thread.terminate(remoteFetcher)
-  // window.alignment = alignment
-  // console.log("Done fetching in localFetcher", typeof alignment, Date.now())
-  return alignment
-}
-
-function useAlignment(file?: File | string) {
-  // console.log("Begin fetching in useAlignment", Date.now())
-  let { data: alignment, error, isLoading } = useSWR(
-    file, 
-    localFetcher/*fetcher*/, 
-    {
-      keepPreviousData: true,
-      compare: (a, b) => (a === b),
-      revalidateIfStale: false,
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  )
-
-  if (!isLoading && !error && !!alignment) {
-    if ((alignment as TAlignment).depth === 0) {
-      error = "Alignment is empty"
-      alignment = undefined
-    }
-  }
-  // console.log("Done fetching in useAlignment", isLoading, error, typeof alignment, Date.now())
-  return { alignment, error, isLoading }
-}
 
 const StatusBar = forwardRef(function StatusBar(props, ref) {
   const [contextualInfo, setContextualInfo] = useState<TContextualInfo | undefined>(undefined)
@@ -243,8 +206,12 @@ export default function Chrome() {
   const { Text } = Typography
   const antdThemeToken = antdTheme.useToken().token
 
+  const alignmentViewerRef = useRef<{ 
+    updateAnnotations:(updatedAnnotations: TAlignmentAnnotations, updatedAnnotationFields: TSequenceAnnotationFields) => void 
+  }>(null)
   const settingsRef = useRef<{ open: () => void, close: () => void }>(null)
   const setContextualInfoRef = useRef<undefined | TSetContextualInfo>(undefined)
+  const cursorTrackerRef = useRef<undefined | ((info?: TAVMouseEventInfo) => void)>(undefined)
   const arrangeColumnsRef = useRef<{open: () => void}>(null)
   const sortByColumnsRef = useRef<{open: () => void}>(null)
   const importAnnotationsRef = useRef<{open: () => void}>(null)
@@ -325,24 +292,45 @@ export default function Chrome() {
   const [file, setFile] = useState<File | undefined>()
   const [searchParams, setSearchParams] = useSearchParams()
   const url = searchParams.get("url")
-  const { alignment: newAlignment, error } = useAlignment(url || file)
-  // console.log(
-  //   alignment?.uuid.substring(0, 4), alignment?.referenceSequenceIndex,
-  //   newAlignment?.uuid.substring(0, 4), newAlignment?.referenceSequenceIndex
-  // )
+  const fileOrUrl = file || url
+  const [prevFileOrUrl, setPrevFileOrUrl] = useState<File | string | null | undefined>(undefined)
 
-  const [isLoadingAlignment, setIsLoadingAlignment] = useState(!!url)
+  // Set the following to `undefined` to indicate we want to use default values (derived from alignment)
+  const [referenceSequenceIndex, setReferenceSequenceIndex] = useState<number | undefined>(undefined)
+  const [pinnedColumns, setPinnedColumns] = useState<string[] | undefined>(undefined)
+  const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[] | undefined>(undefined)
+  const [sortBy, setSortBy] = useState<TAlignmentSortParams[] | undefined>(undefined)
+  const [groupBy, setGroupBy] = useState<string | number | false | undefined>(undefined)
+
+  if (fileOrUrl !== prevFileOrUrl) {
+    setPrevFileOrUrl(fileOrUrl)
+    // Set the following to `undefined` to indicate we want to use default values (derived from alignment)
+    setReferenceSequenceIndex(undefined)
+    setPinnedColumns(undefined)
+    setOtherVisibleColumns(undefined)
+    setSortBy(undefined)
+    setGroupBy(undefined)
+  }
+
+  const [isLoadingAlignment, setIsLoadingAlignment] = useState(false)
+  const [error, setError] = useState<unknown>(undefined)
   const [alignment, setAlignment] = useState<TAlignment | undefined>(undefined)
-  const [referenceSequenceIndex, setReferenceSequenceIndex] = useState(0)
-  const [availableColumnsImported, setAvailableColumnsImported] = useState<string[]>([])
-  const [availableColumnsDerived, setAvailableColumnsDerived] = useState<string[]>([])
-  const [pinnedColumns, setPinnedColumns] = useState<string[]>([])
-  const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[]>(availableColumnsImported.filter((col) => !pinnedColumns.includes(col)))
-  const [sortBy, setSortBy] = useState<TAlignmentSortParams[]>([])
-  const [groupBy, setGroupBy] = useState<string | number | undefined>(undefined)
-  const [groupCount, setGroupCount] = useState(0)
-  const [collapsibleGroups, setCollapsibleGroups] = useState<number[]>([])
-  const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
+  const groupCount = alignment?.groups.length
+
+  const [annotationFields, availableColumnsImported, availableColumnsDerived] = useMemo(() => {
+    let annotationFields: TSequenceAnnotationFields = {}
+    let availableColumnsImported: string[] = []
+    let availableColumnsDerived: string[] = []
+    if (alignment) {
+      annotationFields = alignment.annotationFields
+      ;({
+        importedFields: availableColumnsImported, 
+        derivedFields: availableColumnsDerived,
+      } = getAlignmentAnnotationFields(alignment))
+    }
+    return [annotationFields, availableColumnsImported, availableColumnsDerived]
+  }, [alignment])
+
 
   const handleFileOrUrlChange = /*useStartSpinning*/((newFileOrUrl: File | string) => {
     if (newFileOrUrl === file) {
@@ -353,8 +341,6 @@ export default function Chrome() {
     if (newFileOrUrl === currentUrl) {
       return
     }
-
-    setIsLoadingAlignment(true)
 
     if (newFileOrUrl instanceof File) {
       setFile(newFileOrUrl)
@@ -369,46 +355,52 @@ export default function Chrome() {
     }
   })
 
-  const handleGroupBy = useCallback((by: string | number | undefined) => {
-    if (by === groupBy) {
-      return
+  const handleChangeAlignment = useCallback((newAlignment: TAlignment) => {
+    setAlignment(newAlignment)
+    setReferenceSequenceIndex(newAlignment.referenceSequenceIndex)
+    setGroupBy(newAlignment.groupBy)
+  }, [])
+
+  const handleChangeOtherVisibleColumns = useCallback((otherVisibleColumns: string[]) => {
+    setOtherVisibleColumns(otherVisibleColumns)
+  }, [])
+
+  const handleChangePinnedColumns = useCallback((pinnedColumns: string[]) => {
+    setPinnedColumns(pinnedColumns)
+  }, [])
+
+  const handleChangeSortBy = useCallback((sortBy: TAlignmentSortParams[]) => {
+    setSortBy(sortBy)
+  }, [])
+
+  const handleLoadAlignment = useCallback((alignment: TAlignment | undefined, isLoading: boolean, error: unknown) => {
+    if (alignment !== undefined) {
+      setAlignment(alignment)
     }
-    startSpinning()
-    setGroupBy(by)
-    setCollapsedGroups([])
-  }, [groupBy, setGroupBy, setCollapsedGroups, startSpinning])
+
+    setIsLoadingAlignment(isLoading)
+    if (!isLoading) {
+      settingsRef.current?.close()
+    }
+
+    setError(error)
+  }, [])
 
   // derived states, needs to be updated / re-initialized upon alignment change
-  useEffect(() => {
-    if (alignment === newAlignment) {
-      // console.log("same alignment")
-      return
-    }
-    const uuid = alignment?.uuid
-    setAlignment(newAlignment)
-    if (uuid !== newAlignment.uuid) {
-      const { importedFields, derivedFields } = getAlignmentAnnotationFields(newAlignment)
-      const newPinned = ["id"]
-      const newOtherVisibleColumns = importedFields.filter((col) => !newPinned.includes(col))
-      setReferenceSequenceIndex(0)
-      setAvailableColumnsImported(importedFields)
-      setAvailableColumnsDerived(derivedFields)
-      setPinnedColumns(newPinned)
-      setOtherVisibleColumns(newOtherVisibleColumns)
-      setSortBy([])
-      setGroupBy(undefined)
-      setCollapsedGroups([])
-      setIsLoadingAlignment(false)
-      settingsRef.current?.close()  
-    }
-  }, [
-    alignment, 
-    newAlignment,
-    setReferenceSequenceIndex,
-    setSortBy,
-    setGroupBy,
-    setCollapsedGroups,
-  ])
+  // useEffect(() => {
+  //   if (fileOrUrl !== prevFileOrUrl) {
+  //     setPrevFileOrUrl(fileOrUrl)
+  //     // Set the following to `undefined` to indicate we want to use default values (derived from alignment)
+  //     setReferenceSequenceIndex(undefined)
+  //     setPinnedColumns(undefined)
+  //     setOtherVisibleColumns(undefined)
+  //     setSortBy(undefined)
+  //     setGroupBy(undefined)
+  //   }
+  // }, [
+  //   fileOrUrl, 
+  //   prevFileOrUrl,
+  // ])
 
   let displayFileName: string | ReactNode = ""
   if (alignment) {
@@ -424,7 +416,7 @@ export default function Chrome() {
     return createContextMenu({
       isOverviewMode,
       referenceSequenceIndex, 
-      annotationFields: alignment?.annotationFields,
+      annotationFields,
       availableColumnsImported, 
       availableColumnsDerived, 
       otherVisibleColumns, 
@@ -438,14 +430,14 @@ export default function Chrome() {
       showArrangeColumns,
       setSortBy,
       showSortByColumns,
-      setGroupBy: handleGroupBy,
+      setGroupBy,
       setReferenceSequenceIndex,
       showImportAnnotations,
     })
   }, [
     isOverviewMode,
     referenceSequenceIndex, 
-    alignment?.annotationFields,
+    annotationFields,
     availableColumnsImported, 
     availableColumnsDerived, 
     otherVisibleColumns, 
@@ -454,14 +446,11 @@ export default function Chrome() {
     groupBy,
     contextMenuTarget, 
     antdThemeToken.paddingXS,
-    handleGroupBy,
-    setReferenceSequenceIndex,
-    setSortBy,
   ])
 
   const sortMenu = {
     items: createSortMenu({
-      annotationFields: alignment?.annotationFields,
+      annotationFields,
       availableColumnsImported,
       availableColumnsDerived,
       sortBy,
@@ -474,7 +463,7 @@ export default function Chrome() {
   const groupMenu = {
     items: createGroupByMenu({
       isOverviewMode,
-      annotationFields: alignment?.annotationFields,
+      annotationFields,
       availableColumnsImported,
       availableColumnsDerived,
       groupBy,
@@ -485,7 +474,7 @@ export default function Chrome() {
   const showHideColumnsMenu = {
     items: createShowHideColumnsMenu({
       isOverviewMode,
-      annotationFields: alignment?.annotationFields,
+      annotationFields,
       availableColumnsImported,
       availableColumnsDerived,
       otherVisibleColumns,
@@ -497,64 +486,8 @@ export default function Chrome() {
 
   const handleAlignmentViewerMouseHover = useCallback((info?: TAVMouseEventInfo) => {
     setContextualInfoRef.current?.(info)
+    cursorTrackerRef.current?.(info)
   }, [setContextualInfoRef])
-
-  const handleSortActionIconClick = useCallback((field: string) => {
-    // cycle between "asc" and "desc"
-    if ((sortBy.length !== 1) || (sortBy[0].field !== field) || (sortBy[0].order === "desc")) {
-      setSortBy([{field, order: "asc"}])
-    } else { // sortBy[0].field === "asc"
-      setSortBy([{field, order: "desc"}])
-    }
-    
-    // cycle among "asc", "desc" and unsorted
-    // if ((sortBy.length !== 1) || (sortBy[0].field !== field)) {
-    //   setSortBy([{field, order: "asc"}])
-    // } else if (sortBy[0].order === "asc") {
-    //   setSortBy([{field, order: "desc"}])
-    // } else { // sortBy[0].field === "desc"
-    //   setSortBy([])
-    // }
-  }, [sortBy, setSortBy])
-
-  const handleExpandCollapseGroupIconClick = useCallback((groupIndex: number) => {
-    if (collapsedGroups.includes(groupIndex)) {
-      const newCollapsedGroups = []
-      for (const i of collapsedGroups) {
-        if (i !== groupIndex) {
-          newCollapsedGroups.push(i)
-        }
-      }
-      setCollapsedGroups(newCollapsedGroups)
-    } else {
-      setCollapsedGroups([...collapsedGroups, groupIndex])
-    }
-  }, [collapsedGroups, setCollapsedGroups])
-
-  const handleExpandCollapseAllGroupsIconClick = useCallback(() => {
-    if (
-      (collapsibleGroups.length > 0) && 
-      (collapsedGroups.length === collapsibleGroups.length)
-    ) {
-      setCollapsedGroups([])
-    } else {
-      setCollapsedGroups(collapsibleGroups)
-    }
-  }, [collapsibleGroups, collapsedGroups, setCollapsedGroups])
-
-  const handleAlignmentGroupsChanged = useCallback((groups: TSequenceGroup[]) => {
-    setGroupCount(groups.length)
-
-    const collapsibleGroups: number[] = []
-    if (groups.length) {
-      for (let groupIndex = 0; groupIndex < groups.length; ++groupIndex) {
-        if (groups[groupIndex].members.length > 1) {
-          collapsibleGroups.push(groupIndex)
-        }
-      }
-    }
-    setCollapsibleGroups(collapsibleGroups)
-  }, [])
 
   const handleAlignmentViewerBusy = useCallback((isBusy: boolean) => {
     // console.log("handleAlignmentViewerBusy isBusy", isBusy)
@@ -568,18 +501,18 @@ export default function Chrome() {
 
   const adaptiveContainerRef = useRef<HTMLDivElement>(null)
   const memoizedAlignmentViewer = useMemo(() => {
-    if (!alignment) {
+    if (!fileOrUrl) {
       return undefined
     }
     return (
       <AlignmentViewerAntdWrapper 
-        alignment={alignment}
+        ref={alignmentViewerRef}
+        fileOrUrl={fileOrUrl}
         referenceSequenceIndex={referenceSequenceIndex}
         pinnedColumns={pinnedColumns}
         otherVisibleColumns={otherVisibleColumns}
         sortBy={sortBy}
         groupBy={groupBy}
-        collapsedGroups={collapsedGroups}
         residueFontFamily="monospace"
         toggles={toggles}
         zoom={zoom}
@@ -588,26 +521,26 @@ export default function Chrome() {
         alignmentColorMode={colorMode}
         positionsToStyle={positionsToStyle}
         hideUnstyledPositions={hideUnstyledPositions}
-        highlightCurrentSequence={true}
+        // highlightCurrentSequence={true}
         darkMode={darkMode}
         adaptiveContainerRef={adaptiveContainerRef}
+        onChangeAlignment={handleChangeAlignment}
+        onChangeOtherVisibleColumns={handleChangeOtherVisibleColumns}
+        onChangePinnedColumns={handleChangePinnedColumns}
+        onChangeSortBy={handleChangeSortBy}
+        onLoadAlignment={handleLoadAlignment}
         onMouseHover={handleAlignmentViewerMouseHover}
-        onSortActionIconClick={handleSortActionIconClick}
-        onExpandCollapseGroupIconClick={handleExpandCollapseGroupIconClick}
-        onExpandCollapseAllGroupsIconClick={handleExpandCollapseAllGroupsIconClick}
         onContextMenu={setContextMenuTarget}
         onBusy={handleAlignmentViewerBusy}
-        onGroupsChanged={handleAlignmentGroupsChanged}
       />
     )
   }, [
-    alignment,
+    fileOrUrl,
     referenceSequenceIndex,
     otherVisibleColumns,
     pinnedColumns,
     sortBy,
     groupBy,
-    collapsedGroups,
     toggles,
     zoom,
     isOverviewMode,
@@ -616,11 +549,12 @@ export default function Chrome() {
     positionsToStyle,
     hideUnstyledPositions,
     darkMode,
+    handleLoadAlignment,
+    handleChangeAlignment,
+    handleChangePinnedColumns,
+    handleChangeOtherVisibleColumns,
+    handleChangeSortBy,
     handleAlignmentViewerMouseHover,
-    handleSortActionIconClick,
-    handleExpandCollapseGroupIconClick,
-    handleExpandCollapseAllGroupsIconClick,
-    handleAlignmentGroupsChanged,
     handleAlignmentViewerBusy,
   ])
 
@@ -651,9 +585,9 @@ export default function Chrome() {
             {memoizedAlignmentViewer ? (
               <>
                 <ActionMenuButton menu={showHideColumnsMenu}>Show / Hide</ActionMenuButton>
-                <ActionMenuButton menu={sortMenu} checked={sortBy.length > 0}>Sort</ActionMenuButton>
-                <ActionMenuButton menu={groupMenu} checked={groupBy !== undefined}>
-                  {groupBy === undefined ? "Group" : `${groupCount} Groups`}
+                <ActionMenuButton menu={sortMenu} checked={(sortBy !== undefined) && (sortBy.length > 0)}>Sort</ActionMenuButton>
+                <ActionMenuButton menu={groupMenu} checked={groupBy !== false}>
+                  {groupBy === false ? "Group" : `${groupCount} Groups`}
                 </ActionMenuButton>
               </> 
             ) : null
@@ -661,9 +595,12 @@ export default function Chrome() {
           </Space>
         </Flex>
         <Dropdown menu={contextMenu} trigger={['contextMenu']} disabled={contextMenu.items?.length === 0} >
-          <div ref={adaptiveContainerRef} style={{flexGrow: 1, overflow: "auto"}}>
+          <div ref={adaptiveContainerRef} style={{flexGrow: 1, overflow: "auto", position: "relative"}}>
             {memoizedAlignmentViewer ? (
-                memoizedAlignmentViewer
+              <>
+                {memoizedAlignmentViewer}
+                <CursorTracker ref={cursorTrackerRef} />
+              </>
             ) : (
               <Welcome
                 style={{flexGrow: 1}}
@@ -686,7 +623,7 @@ export default function Chrome() {
       <Settings 
         ref={settingsRef} 
         fileOrUrl={file || url} 
-        isLoading={isLoadingAlignment} // {isLoading}
+        isLoading={isLoadingAlignment}
         error={error}
         zoom={zoom}
         toggles={toggles}
@@ -708,24 +645,28 @@ export default function Chrome() {
       />
       <ArrangeColumns
         ref={arrangeColumnsRef}
-        annotationFields={alignment?.annotationFields}
+        annotationFields={annotationFields}
         availableColumnsImported={availableColumnsImported}
         availableColumnsDerived={availableColumnsDerived}
-        pinnedColumns={pinnedColumns}
-        otherVisibleColumns={otherVisibleColumns}
+        pinnedColumns={pinnedColumns ?? []}
+        otherVisibleColumns={otherVisibleColumns ?? []}
         onSetOtherVisibleColumns={setOtherVisibleColumns}
         onSetPinnedColumns={setPinnedColumns}
       />
       <SortByColumns
         ref={sortByColumnsRef}
-        annotationFields={alignment?.annotationFields}
+        annotationFields={annotationFields}
         availableColumnsImported={availableColumnsImported}
         availableColumnsDerived={availableColumnsDerived}
-        sortBy={sortBy}
+        sortBy={sortBy ?? []}
         onSetSortBy={setSortBy}
       />
       <ImportAnnotations
         ref={importAnnotationsRef}
+        annotations={alignment?.annotations}
+        annotationFields={alignment?.annotationFields}
+        onComplete={alignmentViewerRef.current?.updateAnnotations}
+        onBusy={handleAlignmentViewerBusy}
       />
     </ConfigProvider>
   )

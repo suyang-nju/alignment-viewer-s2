@@ -58,19 +58,25 @@ function generateRandomAlignment(row: {level1: number, level2: number}, col: {le
 
 async function fetcher(fileOrUrl?:File | string) {
   // console.log("Begin fetching in remoteFetcher", Date.now())
+  if (!fileOrUrl) {
+    return undefined
+  }
+
   let alignment: TAlignment | undefined
   if (fileOrUrl === "random") {
     alignment = generateRandomAlignment({ level1: 10, level2: 10 }, { level3: 100, level4: 100 })
   } else {
-    let text: string
+    let text: string, name = ""
     if (typeof fileOrUrl === "string") {
       const response = await fetch(fileOrUrl)
       text = await response.text()
+      name = fileOrUrl
     } else {
       // await new Promise((resolve) => setTimeout(resolve, 5000))
       text = await fileOrUrl.text()
+      name = fileOrUrl.name
     }
-    alignment = createAlingmentFromText(fileOrUrl?.name || "", text)
+    alignment = createAlingmentFromText(name, text)
   }
   // console.log("Done fetching in remoteFetcher", Date.now())
   return alignment

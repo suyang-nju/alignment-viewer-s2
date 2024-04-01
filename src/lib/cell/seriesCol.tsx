@@ -17,8 +17,11 @@ export class SequenceSeriesColCell extends TableColCellWithEvents {
   public drawGroupIconShapes(): void {
     const avStore = this.spreadsheet.avStore
     const alignment = avStore.alignment
+    if (!alignment) {
+      return
+    }
 
-    if (alignment?.groupBy === undefined) {
+    if (alignment.groupBy === false) {
       return
     }
 

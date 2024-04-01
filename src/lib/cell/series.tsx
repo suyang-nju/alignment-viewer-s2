@@ -5,21 +5,21 @@ import { renderRect, renderIcon } from '@antv/s2'
 import { TableSeriesCellWithEvents } from './base'
 
 export class SequenceSeriesCell extends TableSeriesCellWithEvents {
-  protected drawInteractiveBgShape() {
-    this.stateShapes.set(
-      'interactiveBgShape',
-      renderRect(
-        this,
-        {
-          ...this.getCellArea(),
-          width: this.theme.rowCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
-        },
-        {
-          visible: false,
-        },
-      ),
-    );
-  }
+  // protected drawInteractiveBgShape() {
+  //   this.stateShapes.set(
+  //     'interactiveBgShape',
+  //     renderRect(
+  //       this,
+  //       {
+  //         ...this.getCellArea(),
+  //         width: this.theme.rowCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
+  //       },
+  //       {
+  //         visible: false,
+  //       },
+  //     ),
+  //   );
+  // }
 
   protected getFormattedFieldValue(): FormatResult {
     const rowIndex = this.getMeta().rowIndex

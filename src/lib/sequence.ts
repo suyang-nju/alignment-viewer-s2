@@ -275,7 +275,7 @@ export function parseSequenceIdDescription(id: string, desc: string) {
   }
 
   const annotations = {
-    id,
+    __id__: id,
     __actualId__: actualId,
     __begin__: begin ?? 1,
     __end__: end ?? 0, 
@@ -283,7 +283,7 @@ export function parseSequenceIdDescription(id: string, desc: string) {
   }
 
   const annotationFields: TSequenceAnnotationFields = {
-    id: {
+    __id__: {
       name: "ID",
       string: 1,
       number: 0,

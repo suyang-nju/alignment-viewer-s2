@@ -37,8 +37,8 @@ type TArrangeColumnsProps = {
   availableColumnsDerived: string[], 
   otherVisibleColumns: string[], 
   pinnedColumns: string[],
-  onSetOtherVisibleColumns: React.Dispatch<React.SetStateAction<string[]>>,
-  onSetPinnedColumns: React.Dispatch<React.SetStateAction<string[]>>,
+  onSetOtherVisibleColumns: React.Dispatch<React.SetStateAction<string[] | undefined>>,
+  onSetPinnedColumns: React.Dispatch<React.SetStateAction<string[] | undefined>>,
 }
 
 type TColumnTagProps = PropsWithChildren & {

@@ -33,7 +33,7 @@ type TSortByColumnsProps = {
   availableColumnsImported: string[], 
   availableColumnsDerived: string[], 
   sortBy: TAlignmentSortParams[], 
-  onSetSortBy: React.Dispatch<React.SetStateAction<TAlignmentSortParams[]>>,
+  onSetSortBy: React.Dispatch<React.SetStateAction<TAlignmentSortParams[] | undefined>>,
 }
 
 type TSortItemProps = PropsWithChildren & {

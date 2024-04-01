@@ -1,6 +1,6 @@
-import type { CSSProperties, PropsWithChildren, Ref, ReactNode, ChangeEvent, MouseEvent } from 'react'
+import type { ReactNode, ChangeEvent, MouseEvent } from 'react'
 import type { RadioChangeEvent } from 'antd'
-import type { TFileOrUrlPickerProps } from '../lib/types'
+import type { TFileOrUrlPickerProps, TAlignmentAnnotations, TSequenceAnnotationFields } from '../lib/types'
 
 import { useState, useEffect, useMemo, useRef, useImperativeHandle, forwardRef } from 'react'
 import {
@@ -11,7 +11,6 @@ import {
   Button, 
   Radio, 
   Input, 
-  Card, 
   Select, 
 } from 'antd'
 import Papa from 'papaparse'
@@ -197,9 +196,15 @@ function SelectSequenceIdColumn({
 }
 
 export default forwardRef(function ImportAnnotations({
-  onComplete
+  annotations,
+  annotationFields,
+  onComplete,
+  onBusy,
 }: {
-  onComplete: (data: Record<string, string[]>) => void
+  annotations?: TAlignmentAnnotations,
+  annotationFields?: TSequenceAnnotationFields,
+  onComplete?: (updatedAnnotations: TAlignmentAnnotations, updatedAnnotationFields: TSequenceAnnotationFields) => void,
+  onBusy?: (isBusy: boolean) => void,
 }, ref) {
   const [isOpen, setIsOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
@@ -314,10 +319,16 @@ export default forwardRef(function ImportAnnotations({
 
     async function asyncUpdate() {
       if (workerRef.current) {
-        const result = await workerRef.current.parse(delimiter)
+        if (sequenceIdColumn && annotations && annotationFields && onComplete) {
+          onBusy?.(true)
+          const [updatedAnnotations, updatedAnnotationFields, updatedCount] = await workerRef.current.update(delimiter, sequenceIdColumn, annotations, annotationFields)
+          if (updatedCount > 0) {
+            onComplete(updatedAnnotations, updatedAnnotationFields)
+          }
+        }
         await Thread.terminate(workerRef.current)
         workerRef.current = undefined
-        onComplete(result)
+        onBusy?.(false)
       }
     }
 

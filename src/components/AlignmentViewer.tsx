@@ -17,13 +17,15 @@ import type {
   TColumnWidths, 
   TAVExtraOptions,
   TAlignment, 
+  TAlignmentAnnotations, 
+  TSequenceAnnotationFields,
   TAlignmentSortParams, 
   TAlignmentViewerToggles,
   TContextualInfo,
   TAVMouseEventInfo,
   TDimensions,
   TAlignmentViewerProps,
-  TColorEntry, 
+  TAlignmentPositionsToStyle, 
 } from '../lib/types'
 
 import {
@@ -42,12 +44,15 @@ import Sprites from '../lib/sprites'
 import BarSprites from '../lib/BarSprites'
 import { ObjectPool } from "../lib/objectPool"
 import { useSequenceLogos } from '../lib/sequenceLogos'
+import { alignmentColorSchema } from '../lib/AlignmentColorSchema'
+import { getObjectKeys } from '../lib/utils'
+import { getAlignmentAnnotationFields } from '../lib/alignment'
 
 import clsx from 'clsx'
 import { spawn, Thread, Worker } from 'threads'
 // const { spawn, Thread, Worker } = require('threads')
 
-import { useRef, useMemo, useState, useEffect, useCallback, } from 'react'
+import { useRef, useMemo, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
 import {
   Node as S2Node, 
   GuiIcon, 
@@ -324,7 +329,7 @@ function getAVMouseEventInfo(data: TargetCellInfo): TAVMouseEventInfo {
   return { event, target, viewMeta, iconName, contextualInfo }
 }
 
-export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerProps) {
+export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignmentViewerProps, ref) {
   // console.log("render av")
   // console.log("alignment", alignment.uuid, alignment.shape)
   // console.log("zoom", zoom)
@@ -339,8 +344,8 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   const {
     className,
     style,
-    referenceSequenceIndex: propsReferenceSequenceIndex = 0,
-    groupBy: propsGroupBy,
+    // referenceSequenceIndex: propsReferenceSequenceIndex = 0,
+    // groupBy: propsGroupBy,
     zoom = 12,
     isOverviewMode = false,
     toggles = defaultAlignmentViewerToggles,
@@ -351,45 +356,57 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     alignmentColorMode = ALIGNMENT_COLOR_MODES[0],
     // positionsToStyle = "all",
     hideUnstyledPositions = false,
-    highlightCurrentSequence = false,
+    highlightCurrentSequence = true,
     colorTheme,
     adaptiveContainerRef,
+    onLoadAlignment,
+    onChangeAlignment,
+    onChangeSortBy,
+    onChangePinnedColumns,
+    onChangeOtherVisibleColumns,
     onMouseHover,
-    onSortActionIconClick,
-    onExpandCollapseGroupIconClick,
-    onExpandCollapseAllGroupsIconClick,
     onContextMenu,
     onBusy,
-    onGroupsChanged,
   } = alignmentViewerProps
 
-  // parent states for derived states
-  const propsAlignment = alignmentViewerProps.alignment
-  const [alignment, setAlignment] = useState<TAlignment | null>(null)
-
-  const propsPinnedColumns = useMemo(() => (alignmentViewerProps.pinnedColumns ?? []), [alignmentViewerProps.pinnedColumns])
-  const [pinnedColumns, setPinnedColumns] = useState<string[]>([]) // ["id"]
-
-  const propsOtherVisibleColumns = useMemo(() => (alignmentViewerProps.otherVisibleColumns ?? []), [alignmentViewerProps.otherVisibleColumns])
+  const [fileOrUrl, setFileOrUrl] = useState<File | string | undefined>(undefined)
+  const [alignment, setAlignment] = useState<TAlignment | undefined>(undefined)
+  const [pinnedColumns, setPinnedColumns] = useState<string[]>([]) // ["__id__"]
   const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[]>([])
-
-  const propsCollapsedGroups = useMemo(() => (alignmentViewerProps.collapsedGroups ?? []), [alignmentViewerProps.collapsedGroups])
   const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
-
-  const propsSortBy = useMemo(() => (alignmentViewerProps.sortBy ?? []), [alignmentViewerProps.sortBy])
   const [sortBy, setSortBy] = useState<TAlignmentSortParams[]>([])
+  const [alignmentColorPalette, setAlignmentColorPalette] = useState(alignmentColorSchema[getObjectKeys(alignmentColorSchema)[0]])
+  const [darkMode, setDarkMode] = useState(false)
+  const [positionsToStyle, setPositionsToStyle] = useState<TAlignmentPositionsToStyle>("all")
 
-  const propsAlignmentColorPalette = useMemo(() => (alignmentViewerProps.alignmentColorPalette ?? {
-    Dark: new Map<string, TColorEntry>(), 
-    Light: new Map<string, TColorEntry>()
-  }), [alignmentViewerProps.alignmentColorPalette])
-  const [alignmentColorPalette, setAlignmentColorPalette] = useState(propsAlignmentColorPalette)
+  useImperativeHandle(ref, () => ({
+    updateAnnotations(updatedAnnotations: TAlignmentAnnotations, updatedAnnotationFields: TSequenceAnnotationFields) {
+      if (!alignment) {
+        return
+      }
 
-  const propsDarkMode = alignmentViewerProps.darkMode ?? false
-  const [darkMode, setDarkMode] = useState(propsDarkMode)
+      const newlyAddedColumns: string[] = []
+      for (const field of Object.keys(updatedAnnotationFields)) {
+        if (!(field in alignment.annotationFields)) {
+          newlyAddedColumns.push(field)
+        }
+      }
 
-  const propsPositionsToStyle = alignmentViewerProps.positionsToStyle ?? "all"
-  const [positionsToStyle, setPositionsToStyle] = useState(propsPositionsToStyle)
+      const newAlignment: TAlignment = {
+        ...alignment,
+        annotations: updatedAnnotations,
+        annotationFields: updatedAnnotationFields,
+      }
+
+      setAlignment(newAlignment)
+      onChangeAlignment?.(newAlignment)
+      if (newlyAddedColumns.length > 0) {
+        const newOtherVisibleColumns = [...otherVisibleColumns, ...newlyAddedColumns]
+        setOtherVisibleColumns(newOtherVisibleColumns)
+        onChangeOtherVisibleColumns?.(newOtherVisibleColumns)
+      }
+    }
+  }), [alignment, otherVisibleColumns, onChangeAlignment, onChangeOtherVisibleColumns])
 
   const s2Ref = useRef<AVTableSheet>(null)
 
@@ -416,15 +433,83 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     return [shownFields, pinnedColumnsCount]
   }, [alignment?.annotationFields, otherVisibleColumns, pinnedColumns, isOverviewMode])
 
+  const collapsibleGroups = useMemo(() => {
+    if (alignment?.groups.length) {
+      const collapsibleGroups = []
+      for (let groupIndex = 0; groupIndex < alignment.groups.length; ++groupIndex) {
+        if (alignment.groups[groupIndex].members.length > 1) {
+          collapsibleGroups.push(groupIndex)
+        }
+      }
+      return collapsibleGroups
+    } else {
+      return []
+    }
+  }, [alignment?.groups])
+
+
+  const handleSortActionIconClick = useCallback((field: string) => {
+    let newSortBy: TAlignmentSortParams[]
+    // cycle between "asc" and "desc"
+    if ((sortBy.length !== 1) || (sortBy[0].field !== field) || (sortBy[0].order === "desc")) {
+      newSortBy = [{field, order: "asc"}]
+    } else { // sortBy[0].field === "asc"
+      newSortBy = [{field, order: "desc"}]
+    }
+    
+    // cycle through "asc", "desc" and unsorted
+    // if ((sortBy.length !== 1) || (sortBy[0].field !== field)) {
+    //   setSortBy([{field, order: "asc"}])
+    // } else if (sortBy[0].order === "asc") {
+    //   setSortBy([{field, order: "desc"}])
+    // } else { // sortBy[0].field === "desc"
+    //   setSortBy([])
+    // }
+
+    // console.log(newSortBy)
+    // setSortBy(newSortBy)
+    onChangeSortBy?.(newSortBy)
+  }, [
+    sortBy, 
+    // setSortBy, 
+    onChangeSortBy
+  ])
+
+  const handleExpandCollapseGroupIconClick = useCallback((groupIndex: number) => {
+    if (collapsedGroups.includes(groupIndex)) {
+      const newCollapsedGroups = []
+      for (const i of collapsedGroups) {
+        if (i !== groupIndex) {
+          newCollapsedGroups.push(i)
+        }
+      }
+      setCollapsedGroups(newCollapsedGroups)
+    } else {
+      setCollapsedGroups([...collapsedGroups, groupIndex])
+    }
+  }, [collapsedGroups, setCollapsedGroups])
+
+  const handleExpandCollapseAllGroupsIconClick = useCallback(() => {
+    if (
+      (collapsibleGroups.length > 0) && 
+      (collapsedGroups.length === collapsibleGroups.length)
+    ) {
+      setCollapsedGroups([])
+    } else {
+      setCollapsedGroups(collapsibleGroups)
+    }
+  }, [collapsibleGroups, collapsedGroups, setCollapsedGroups])
+
+
   // const handleActionIconClick = useCallback((event: CanvasEvent) => {
   const handleColHeaderActionIconClick = useCallback((props: HeaderIconClickParams) => {
     const { iconName, meta: node, event } = props
     // s2Ref.current?.interaction.reset()
     // console.log(iconName, node, event)
     if (iconName.startsWith("Sort")) {
-      onSortActionIconClick?.(node.field)
+      handleSortActionIconClick(node.field)
     }
-  }, [/*s2Ref,*/ onSortActionIconClick])
+  }, [handleSortActionIconClick])
 
   // console.log("setS2ThemeCfg EFFECT", dimensions, scrollbarSize, highlightCurrentSequence)
   const s2ThemeCfg = useS2ThemeCfg(
@@ -448,19 +533,69 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   const [minimapImage, setMinimapImage] = useState<OffscreenCanvas>()
   const maxMinimapWidth = dimensions.maxMinimapWidth
   const maxMinimapHeight = window.innerHeight
+
   useEffect(() => {
     async function asyncUpdate() {
       // console.log("in async update")
       onBusy?.(true)
 
+      // parent states for derived states
+      const propsFileOrUrl = alignmentViewerProps.fileOrUrl
+      let propsReferenceSequenceIndex = alignmentViewerProps.referenceSequenceIndex
+      let propsPinnedColumns = alignmentViewerProps.pinnedColumns
+      let propsOtherVisibleColumns = alignmentViewerProps.otherVisibleColumns
+      let propsGroupBy = alignmentViewerProps.groupBy
+      // let propsCollapsedGroups = alignmentViewerProps.collapsedGroups
+      let propsSortBy = alignmentViewerProps.sortBy
+      const propsAlignmentColorPalette = alignmentViewerProps.alignmentColorPalette ?? alignmentColorSchema[getObjectKeys(alignmentColorSchema)[0]]
+      const propsDarkMode = alignmentViewerProps.darkMode ?? false
+      const propsPositionsToStyle = alignmentViewerProps.positionsToStyle ?? "all"
+
       const tasks: Array<"setReference" | "group" | "sort" | "minimap"> = []
-      let inputAlignment: TAlignment
-      if (propsAlignment.uuid !== alignment?.uuid) {
-        inputAlignment = propsAlignment
-        tasks.push("setReference", "group", "sort")
-      } else {
+      let inputAlignment: TAlignment | undefined = undefined
+      if (propsFileOrUrl && (propsFileOrUrl !== fileOrUrl)) {
+        onLoadAlignment?.(undefined, true, false)
+
+        const worker = await spawn(new Worker(new URL('../workers/fetchAlignment.ts', import.meta.url), { type: 'module' }))
+        inputAlignment = await worker(propsFileOrUrl)
+        await Thread.terminate(worker)
+
+        if (!inputAlignment || inputAlignment.depth === 0) {
+          inputAlignment = undefined
+          onLoadAlignment?.(undefined, false, true)
+        } else {
+          onLoadAlignment?.(inputAlignment, false, false)
+
+          if (propsReferenceSequenceIndex === undefined) {
+            propsReferenceSequenceIndex = 0
+          }
+
+          if (propsPinnedColumns === undefined) {
+            propsPinnedColumns = [] // ["__id__"]
+          }
+
+          if (propsOtherVisibleColumns === undefined) {
+            const { importedFields } = getAlignmentAnnotationFields(inputAlignment)
+            propsOtherVisibleColumns = importedFields.filter((col) => !propsPinnedColumns!.includes(col))
+          }
+
+          if (propsGroupBy === undefined) {
+            propsGroupBy = false
+          }
+          
+          // if (propsCollapsedGroups === undefined) {
+          //   propsCollapsedGroups = []
+          // }
+
+          if (propsSortBy === undefined) {
+            propsSortBy = []
+          }
+          
+          tasks.push("setReference", "group", "sort")
+        }
+      } else if (alignment) {
         inputAlignment = alignment
-        if (alignment?.referenceSequenceIndex !== propsReferenceSequenceIndex) {
+        if ((propsReferenceSequenceIndex !== undefined) && (alignment.referenceSequenceIndex !== propsReferenceSequenceIndex)) {
           tasks.push("setReference")
 
           if (
@@ -470,169 +605,190 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
             tasks.push("group")
           }
 
-          let shouldSort = false
-          for (const by of propsSortBy) {
-            if (
-              (by.field === "__hammingDistanceToReference__") || 
-              (by.field === "__blosum62ScoreToReference__")  
-            ) {
-              shouldSort = true
-              break
+          if (propsSortBy !== undefined) {
+            let shouldSort = false
+            for (const by of propsSortBy) {
+              if (
+                (by.field === "__hammingDistanceToReference__") || 
+                (by.field === "__blosum62ScoreToReference__")  
+              ) {
+                shouldSort = true
+                break
+              }
             }
-          }
-
-          if (shouldSort) {
-            tasks.push("sort")
+  
+            if (shouldSort) {
+              tasks.push("sort")
+            }
           }
         }
 
-        if (!tasks.includes("group") && (alignment?.groupBy !== propsGroupBy)) {
+        if ((propsGroupBy !== undefined) && (alignment.groupBy !== propsGroupBy) && !tasks.includes("group")) {
           tasks.push("group", "sort")
         }
 
-        if (!tasks.includes("sort") && (sortBy !== propsSortBy)) {
+        if ((propsSortBy !== undefined) && (sortBy !== propsSortBy) && !tasks.includes("sort")) {
           tasks.push("sort")
         }
       }
 
-      if (
-        (tasks.includes("setReference") && ((propsPositionsToStyle === "sameAsReference") || (propsPositionsToStyle === "differentFromReference"))) || 
-        (tasks.includes("sort")) ||
-        (propsPositionsToStyle !== positionsToStyle) || 
-        (propsAlignmentColorPalette !== alignmentColorPalette) || 
-        (propsDarkMode !== darkMode)
-      ) {
-        tasks.push("minimap")
-      }
+      if (inputAlignment) {
+        if (
+          (tasks.includes("setReference") && ((propsPositionsToStyle === "sameAsReference") || (propsPositionsToStyle === "differentFromReference"))) || 
+          (tasks.includes("sort")) ||
+          (propsPositionsToStyle !== positionsToStyle) || 
+          (propsAlignmentColorPalette !== alignmentColorPalette) || 
+          (propsDarkMode !== darkMode)
+        ) {
+          tasks.push("minimap")
+        }
 
-      if (tasks.length > 0) {
-        const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
-        const remoteUpdateAlignment = await spawn(worker)
-        const [
-          outputAlignment, newSortedIndices, overviewBuffer, minimapBuffer, minimapImageWidth, minimapImageHeight
-        ]: [TAlignment, number[], ArrayBuffer | undefined, ArrayBuffer | undefined, number | undefined, number | undefined] = await remoteUpdateAlignment(
-          tasks,
-          inputAlignment,
-          sortedIndices,
-          propsReferenceSequenceIndex,
-          propsSortBy,
-          propsGroupBy,
-          propsPositionsToStyle,
-          propsDarkMode ? propsAlignmentColorPalette["Dark"] : propsAlignmentColorPalette["Light"],
-          maxMinimapWidth,
-          maxMinimapHeight,
-        )
-        await Thread.terminate(remoteUpdateAlignment)
-  
-        const didSetReference = tasks.includes("setReference")
-        const didGroup = tasks.includes("group")
-        if (didSetReference || didGroup) {
-          const newAlignment = {...inputAlignment}
-          newAlignment.annotations = outputAlignment.annotations
-          
-          if (didSetReference) {
-            newAlignment.referenceSequenceIndex = outputAlignment.referenceSequenceIndex
-          }
-  
-          if (didGroup) {
-            newAlignment.groupBy = outputAlignment.groupBy
-            newAlignment.groups = outputAlignment.groups
-            onGroupsChanged?.(newAlignment.groups)
-          }
-  
-          setAlignment(newAlignment)
-        }
-  
-        if (didGroup || tasks.includes("sort")) {
-          setSortedIndices(newSortedIndices)
-          if (sortBy !== propsSortBy) {
-            setSortBy(propsSortBy)
-          }
-        }
-  
-        if (tasks.includes("minimap")) {
-          if (overviewBuffer) {
-            const overviewImageWidth = outputAlignment.length
-            const overviewImageHeight = outputAlignment.depth
-            const overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewImageWidth, overviewImageHeight)
-            setOverviewImageData(overviewImageData)
+        if (tasks.length > 0) {
+          const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
+          const remoteUpdateAlignment = await spawn(worker)
+          const [
+            outputAlignment, newSortedIndices, overviewBuffer, minimapBuffer, minimapImageWidth, minimapImageHeight
+          ]: [TAlignment, number[], ArrayBuffer | undefined, ArrayBuffer | undefined, number | undefined, number | undefined] = await remoteUpdateAlignment(
+            tasks,
+            inputAlignment,
+            sortedIndices,
+            propsReferenceSequenceIndex,
+            propsSortBy,
+            propsGroupBy,
+            propsPositionsToStyle,
+            propsDarkMode ? propsAlignmentColorPalette["Dark"] : propsAlignmentColorPalette["Light"],
+            maxMinimapWidth,
+            maxMinimapHeight,
+          )
+          await Thread.terminate(remoteUpdateAlignment)
+    
+          const didSetReference = tasks.includes("setReference")
+          const didGroup = tasks.includes("group")
+          if (didSetReference || didGroup) {
+            const newAlignment = {...inputAlignment}
+            newAlignment.annotations = outputAlignment.annotations
             
-            const minimapWidth = minimapImageWidth ?? overviewImageWidth
-            const minimapHeight = minimapImageHeight ?? overviewImageHeight
-            const newMinimapImage = new OffscreenCanvas(minimapWidth, minimapHeight)
-            const ctx = newMinimapImage?.getContext("2d")
-            if (minimapBuffer && minimapImageWidth && minimapImageHeight) {
-              const minimapImageData = new ImageData(new Uint8ClampedArray(minimapBuffer), minimapImageWidth, minimapImageHeight)
-              ctx?.putImageData(minimapImageData, 0, 0)
-            } else {
-              ctx?.putImageData(overviewImageData, 0, 0)
+            if (didSetReference) {
+              newAlignment.referenceSequenceIndex = outputAlignment.referenceSequenceIndex
             }
-            setMinimapImage(newMinimapImage)
+    
+            if (didGroup) {
+              newAlignment.groupBy = outputAlignment.groupBy
+              newAlignment.groups = outputAlignment.groups
+            }
+    
+            setAlignment(newAlignment)
+            console.log("new alignment for next render")
+            onChangeAlignment?.(newAlignment)
+          }
+    
+          if (didGroup || tasks.includes("sort")) {
+            setSortedIndices(newSortedIndices)
+            if ((propsSortBy !== undefined) && (sortBy !== propsSortBy)) {
+              setSortBy(propsSortBy)
+              onChangeSortBy?.(propsSortBy)
+            }
+          }
+    
+          if (tasks.includes("minimap")) {
+            if (overviewBuffer) {
+              const overviewImageWidth = outputAlignment.length
+              const overviewImageHeight = outputAlignment.depth
+              const overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewImageWidth, overviewImageHeight)
+              setOverviewImageData(overviewImageData)
+              
+              const minimapWidth = minimapImageWidth ?? overviewImageWidth
+              const minimapHeight = minimapImageHeight ?? overviewImageHeight
+              const newMinimapImage = new OffscreenCanvas(minimapWidth, minimapHeight)
+              const ctx = newMinimapImage?.getContext("2d")
+              if (minimapBuffer && minimapImageWidth && minimapImageHeight) {
+                const minimapImageData = new ImageData(new Uint8ClampedArray(minimapBuffer), minimapImageWidth, minimapImageHeight)
+                ctx?.putImageData(minimapImageData, 0, 0)
+              } else {
+                ctx?.putImageData(overviewImageData, 0, 0)
+              }
+              setMinimapImage(newMinimapImage)
+            }
+    
+            if (propsPositionsToStyle !== positionsToStyle) {
+              setPositionsToStyle(propsPositionsToStyle)
+            }
+            
+            if (propsAlignmentColorPalette !== alignmentColorPalette) {
+              setAlignmentColorPalette(propsAlignmentColorPalette)
+            }
+    
+            if (propsDarkMode !== darkMode) {
+              setDarkMode(propsDarkMode)
+            }
           }
   
-          if (propsPositionsToStyle !== positionsToStyle) {
-            setPositionsToStyle(propsPositionsToStyle)
-          }
-          
-          if (propsAlignmentColorPalette !== alignmentColorPalette) {
-            setAlignmentColorPalette(propsAlignmentColorPalette)
-          }
+          // console.log("set alignment", alignment?.uuid.substring(0, 4), "->", propsAlignment.uuid.substring(0, 4))
+        }
   
-          if (propsDarkMode !== darkMode) {
-            setDarkMode(propsDarkMode)
+        if ((propsPinnedColumns !== undefined) && (pinnedColumns !== propsPinnedColumns)) {
+          setPinnedColumns(propsPinnedColumns)
+          onChangePinnedColumns?.(propsPinnedColumns)
+        }
+  
+        if ((propsOtherVisibleColumns !== undefined) && (otherVisibleColumns !== propsOtherVisibleColumns)) {
+          setOtherVisibleColumns(propsOtherVisibleColumns)
+          onChangeOtherVisibleColumns?.(propsOtherVisibleColumns)
+        }
+  
+        // if ((propsCollapsedGroups !== undefined) && (collapsedGroups !== propsCollapsedGroups)) {
+        //   setCollapsedGroups(propsCollapsedGroups)
+        // }
+  
+        if ((propsFileOrUrl !== undefined) && (propsFileOrUrl !== fileOrUrl)) {
+          setFileOrUrl(propsFileOrUrl)
+          setCollapsedGroups([])
+  
+          if (s2Ref.current?.options.style?.colCfg?.widthByFieldValue) {
+            s2Ref.current.options.style.colCfg.widthByFieldValue = undefined
           }
         }
-
-        // console.log("set alignment", alignment?.uuid.substring(0, 4), "->", propsAlignment.uuid.substring(0, 4))
-      }
-
-      if (pinnedColumns !== propsPinnedColumns) {
-        setPinnedColumns(propsPinnedColumns)
-      }
-
-      if (otherVisibleColumns !== propsOtherVisibleColumns) {
-        setOtherVisibleColumns(propsOtherVisibleColumns)
-      }
-
-      if (collapsedGroups !== propsCollapsedGroups) {
-        setCollapsedGroups(propsCollapsedGroups)
-      }
-
-      if ((propsAlignment.uuid !== alignment?.uuid) && s2Ref.current?.options.style?.colCfg?.widthByFieldValue) {
-        s2Ref.current.options.style.colCfg.widthByFieldValue = undefined
       }
 
       onBusy?.(false)
     }
     asyncUpdate()
   }, [
-    propsAlignment, 
+    alignmentViewerProps.fileOrUrl,
+    alignmentViewerProps.referenceSequenceIndex,
+    alignmentViewerProps.pinnedColumns,
+    alignmentViewerProps.otherVisibleColumns,
+    alignmentViewerProps.groupBy,
+    alignmentViewerProps.sortBy,
+    alignmentViewerProps.alignmentColorPalette,
+    alignmentViewerProps.darkMode,
+    alignmentViewerProps.positionsToStyle,
+    fileOrUrl,
     alignment,
-    propsReferenceSequenceIndex,
-    propsPinnedColumns,
     pinnedColumns,
-    propsOtherVisibleColumns,
     otherVisibleColumns,
-    propsCollapsedGroups,
     collapsedGroups,
-    propsSortBy,
     sortBy,
     sortedIndices,
-    propsGroupBy,
-    propsPositionsToStyle, 
     positionsToStyle,
-    propsAlignmentColorPalette, 
     alignmentColorPalette,
-    propsDarkMode,
     darkMode,
     maxMinimapWidth,
     maxMinimapHeight,
+    onLoadAlignment,
+    onChangeAlignment,
+    onChangeSortBy,
+    onChangeOtherVisibleColumns, 
+    onChangePinnedColumns,
     onBusy,
-    onGroupsChanged,
   ])
 
   const [sortedDisplayedIndices, isCollapsedGroup]: [number[], boolean[]] = useMemo(() => {
     if (alignment?.groupBy === undefined) {
+      return [[], []]
+    }
+
+    if (alignment?.groupBy === false) {
       return [[...sortedIndices], Array(sortedIndices.length).fill(false)]
     }
 
@@ -944,7 +1100,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
     // }
 
     if ((target.cellType === CellTypes.COL_CELL) && (viewMeta.field === SERIES_NUMBER_FIELD)) {
-      onExpandCollapseAllGroupsIconClick?.()
+      handleExpandCollapseAllGroupsIconClick()
     } else if ((target.cellType === CellTypes.ROW_CELL) && (viewMeta.valueField === SERIES_NUMBER_FIELD)) {
       const i = viewMeta.rowIndex - firstSequenceRowIndex
       if (i < 0) {
@@ -952,15 +1108,15 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       }
       const groupIndex = alignment?.annotations.__groupIndex__[sortedDisplayedIndices[i]]
       if (groupIndex !== undefined) {
-        onExpandCollapseGroupIconClick?.(groupIndex)
+        handleExpandCollapseGroupIconClick(groupIndex)
       }
     }
   }, [
     firstSequenceRowIndex,
     sortedDisplayedIndices,
     alignment?.annotations.__groupIndex__,
-    onExpandCollapseAllGroupsIconClick,
-    onExpandCollapseGroupIconClick
+    handleExpandCollapseAllGroupsIconClick,
+    handleExpandCollapseGroupIconClick
   ])
 
   const handleMounted = useCallback((s2: SpreadSheet) => {
@@ -1064,18 +1220,6 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   //   console.log("destroy")
   // }, [])
 
-  const adaptiveProp = useMemo(() => {
-    if (adaptiveContainerRef?.current) {
-      return {
-        width: true, 
-        height: true, 
-        getContainer: () => (adaptiveContainerRef.current as HTMLElement)
-      }
-    } else {
-      return undefined
-    }
-  }, [adaptiveContainerRef])
-
   const spreadsheet = useCallback((container: S2MountContainer, dataCfg: S2DataConfig, options: SheetComponentOptions) => {
     // console.log("new AVTableSheet instance")
     return new AVTableSheet(container, dataCfg, options as S2Options, avExtraOptions)
@@ -1083,7 +1227,13 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
   
   const memoizedSheetComponent = useMemo(() => {
     // initAVStore(s2Ref.current)
+    console.log("updateavstore in memoizedSheetComponent", avExtraOptions.alignment?.name)
     s2Ref.current?.updateAVStore(avExtraOptions)
+    const adaptiveProp = (adaptiveContainerRef?.current) ? {
+      width: true, 
+      height: true, 
+      getContainer: () => (adaptiveContainerRef.current as HTMLElement)
+    } : undefined
     return (
       <SheetComponent
         ref={s2Ref}
@@ -1120,17 +1270,18 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
         onLayoutResizeColWidth={handleLayoutResizeColWidth}
         onCopied={(data) => {console.log(data)}}
         onDataCellEditEnd={(meta) => {console.log('onDataCellEditEnd', meta)}}
+        onSheetUpdate={(options)=>{console.log("onSheetUpdate", options); return options}}
       />
     )
   }, [
     // initAVStore,
     avExtraOptions,
+    adaptiveContainerRef,
     spreadsheet,
     s2Ref,
     s2DataCfg,
     s2Options,
     s2ThemeCfg,
-    adaptiveProp,
     handleDataCellClick,
     handleRowCellClick,
     handleRowCellMouseDown,
@@ -1156,6 +1307,7 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
 
   useEffect(() => {
     if (!sheetComponentPropsChangedRef.current) {
+      console.log("force render avtable")
       s2Ref.current?.render(false, { reBuildDataSet: false, reBuildHiddenColumnsDetail: false, reloadData: false})
     }
   })
@@ -1169,5 +1321,5 @@ export default function AlignmentViewer(alignmentViewerProps: TAlignmentViewerPr
       {alignment && memoizedSheetComponent}
     </div>
   )
-}
+})
 

@@ -73,7 +73,7 @@ export class AVDataSet extends TableDataSet {
       if (isString(__sequenceIndex__)) {
         if (__sequenceIndex__ === "$$reference$$") {
           switch (query.field) {
-            case "id":
+            case "__id__":
               return "Reference\n" + alignment.annotations[query.field]?.[alignment.referenceSequenceIndex]
             case "__sequenceIndex__":
               return __sequenceIndex__
@@ -81,7 +81,7 @@ export class AVDataSet extends TableDataSet {
               return alignment.annotations[query.field]?.[alignment.referenceSequenceIndex]
           }
         } else {
-          return (query.field === "id") ? SPECIAL_ROWS[__sequenceIndex__].label : rowData[query.field]
+          return (query.field === "__id__") ? SPECIAL_ROWS[__sequenceIndex__].label : rowData[query.field]
         }
       } else {
         if (query.field === SERIES_NUMBER_FIELD) {
@@ -161,6 +161,11 @@ export class AVTableSheet extends TableSheet {
   // protected minimapRealHeight = 0
     
   protected checkContextLostTimeInterval: number = 0
+
+  render(reloadData?: boolean, options?: { reBuildDataSet?: boolean, reBuildHiddenColumnsDetail?: boolean }) {
+    console.log("render table", reloadData, options)
+    super.render(reloadData, options)
+  }
 
   constructor(dom: S2MountContainer, dataCfg: S2DataConfig, options: S2Options, initialAVStore: TAVExtraOptions) {
     super(dom, dataCfg, options)
@@ -1200,10 +1205,10 @@ const useLayoutCoordinate = (
 
   const {left: cellPaddingLeft = 0, right: cellPaddingRight = 0} = spreadsheet.theme.dataCell?.cell?.padding ?? {}
   const EXTRA_PIXEL = 1
-  colNode.width = Math.max(
+  colNode.width = Math.min(200, Math.max(
     spreadsheet.measureTextWidth(longestCellData, spreadsheet.theme.dataCell?.text), 
     spreadsheet.measureTextWidth(colNode.label, spreadsheet.theme.colCell?.bolderText)
-  ) + cellPaddingLeft + cellPaddingRight + EXTRA_PIXEL
+  )) + cellPaddingLeft + cellPaddingRight + EXTRA_PIXEL
 
   let iconCount = 0
   for (const iconName of headerActionIcons[0].iconNames) {
@@ -1274,17 +1279,23 @@ const useDataCell = (
     renderer = RENDERER_TYPES.SEQUENCE_SERIES
   } else if (viewMeta.valueField === "$$minimap$$") {
     renderer = RENDERER_TYPES.MINIMAP_DUMMY
-  } else if (viewMeta.valueField === "id") {
+  } else if (viewMeta.valueField === "__id__") {
     renderer = RENDERER_TYPES.SEQUENCE_ID
   } else {
     renderer = RENDERER_TYPES.TEXT
     const spreadsheet = viewMeta.spreadsheet as AVTableSheet
     const alignment = spreadsheet.avStore.alignment
     if (alignment) {
-      const { number, string } = alignment.annotationFields[viewMeta.valueField]
-      if (number > string) {
-        // console.log(viewMeta.valueField, alignment.annotationFields[viewMeta.valueField])
-        renderer = RENDERER_TYPES.NUMBER
+      try {
+        const { number, string } = alignment.annotationFields[viewMeta.valueField]
+        if (number > string) {
+          // console.log(viewMeta.valueField, alignment.annotationFields[viewMeta.valueField])
+          renderer = RENDERER_TYPES.NUMBER
+        }
+      } catch (e) {
+        // console.log("useDataCell", viewMeta.spreadsheet.avStore.alignment?.name, viewMeta.valueField)
+        console.log("useDataCell", viewMeta.spreadsheet.avStore.alignment?.name, viewMeta.valueField, viewMeta.spreadsheet.dataCfg.fields.columns)
+        throw(e)
       }
     }
   }
@@ -1295,7 +1306,7 @@ const useDataCell = (
 ])
 
 export function useS2Options(
-  alignment: TAlignment | null,
+  alignment: TAlignment | undefined,
   columns: string[],
   columnWidthsRef: MutableRefObject<TColumnWidths>,
   pinnedColumnsCount: number,
@@ -1310,6 +1321,7 @@ export function useS2Options(
   highlightCurrentSequence: boolean, 
   onColHeaderActionIconClick: (props: HeaderIconClickParams) => void,
 ): SheetComponentOptions {
+  console.log("useS2Options", alignment?.name, columns)
   const headerActionIcons = useMemo(() => (
     getHeaderActionIcons(columns, sortBy, alignment?.groupBy, onColHeaderActionIconClick)
   ), [columns,sortBy, alignment?.groupBy, onColHeaderActionIconClick])
@@ -1426,8 +1438,8 @@ export function useS2Options(
         hoverHighlight: {
           rowHeader: false,
           currentRow: highlightCurrentSequence,
-          colHeader: true,
-          currentCol: true,
+          colHeader: false,
+          currentCol: false,
         },
         selectedCellHighlight: false,
         selectedCellMove: false,
@@ -1538,9 +1550,10 @@ export function useS2ThemeCfg(
             // crossBackgroundColor: "#f0f2f4", 
             interactionState: {
               hover: {
-                borderWidth: 4,
-                backgroundColor: colorTheme.backgroundOnHover, // colorTheme.headerText,
-                backgroundOpacity: 1,
+                backgroundColor: "transparent",
+                // borderWidth: 4,
+                // backgroundColor: colorTheme.backgroundOnHover, // colorTheme.headerText,
+                // backgroundOpacity: 1,
               },
             }
           }
@@ -1552,13 +1565,13 @@ export function useS2ThemeCfg(
           icon: commonIconTheme,
           cell: {
             ...commonCellTheme,
-            interactionState: {
-              hover: {
-                borderWidth: 4,
-                backgroundColor: colorTheme.backgroundOnHover, // colorTheme.headerText,
-                backgroundOpacity: 1,
-              },
-            },
+            // interactionState: {
+            //   hover: {
+            //     borderWidth: 4,
+            //     backgroundColor: colorTheme.backgroundOnHover, // colorTheme.headerText,
+            //     backgroundOpacity: 1,
+            //   },
+            // },
           },
         },
         cornerCell: {
@@ -1637,12 +1650,13 @@ export function useS2ThemeCfg(
 }
 
 export function useS2DataCfg(
-  alignment: TAlignment | null, 
+  alignment: TAlignment | undefined, 
   sortedDisplayedIndices: number[], 
   isCollapsedGroup: boolean[],
   columns: string[], 
   isOverviewMode: boolean,
 ) {
+  console.log("useS2DataCfg", alignment?.name, columns)
   return useMemo(() => {
     const data: DataType[] = []
     const groupSizeAtRowIndex: number[] = []

@@ -97,7 +97,7 @@ export class SequenceIdDataCell extends TextDataCell {
         } else {
           this.textShape?.attr({
             fill: this.getMeta().spreadsheet.theme.dataCell?.text?.fill,
-            cursor: 'pointer',
+            cursor: 'default',
           })
           this.linkTextUnderlineShape?.set("visible", false)
           // this.stateShapes.forEach((shape: IShape) => {

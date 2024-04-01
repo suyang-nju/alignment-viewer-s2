@@ -90,7 +90,7 @@ export default forwardRef(function Settings({
       width="fit-content"
       onClose={handleClose} 
       open={isVisible}
-      mask={true}
+      mask={false}
       extra={<Button icon={<Icon component={darkMode ? BsCircleHalf : BsCircleHalf}/>} onClick={handleDarkModeChange}>{darkMode ? "Light" : "Dark"}</Button>}
     >
       <Flex vertical gap="middle" justify="flex-start" >

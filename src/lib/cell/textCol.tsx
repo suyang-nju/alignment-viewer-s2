@@ -8,21 +8,21 @@ import {
 import { TableColCellWithEvents } from './base'
 
 export class TextColCell extends TableColCellWithEvents {
-  protected drawInteractiveBgShape() {
-    this.stateShapes.set(
-      'interactiveBgShape',
-      renderRect(
-        this,
-        {
-          ...this.getCellArea(),
-          height: this.theme.colCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
-        },
-        {
-          visible: false,
-        },
-      ),
-    )
-  }
+  // protected drawInteractiveBgShape() {
+  //   this.stateShapes.set(
+  //     'interactiveBgShape',
+  //     renderRect(
+  //       this,
+  //       {
+  //         ...this.getCellArea(),
+  //         height: this.theme.colCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
+  //       },
+  //       {
+  //         visible: false,
+  //       },
+  //     ),
+  //   )
+  // }
 
   protected drawTextShape(): void {
     if (this.spreadsheet.avStore.isOverviewMode) {

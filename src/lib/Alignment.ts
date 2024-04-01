@@ -27,7 +27,7 @@ import {
 import { parseFasta } from './fasta'
 import { parseStockholm } from './stockholm'
 import getBlosum62Score from './blosum62'
-import { getObjectKeys } from './utils'
+import { getObjectKeys, formatFieldName } from './utils'
 
 import { isNumber, range } from 'lodash'
 import { v4 as uuid4 } from 'uuid'
@@ -176,7 +176,7 @@ export function createAlingmentFromSequenceRecords(
     annotations,
     positionalAnnotations,
     annotationFields,
-    groupBy: undefined,
+    groupBy: false,
     groups: [],
   }
 }
@@ -190,7 +190,7 @@ export function getAlignmentAnnotationFields(alignment: TAlignment) {
         continue
       }
 
-      if (field.startsWith("__") && field.endsWith("__")) {
+      if ((field !== "__id__") && field.startsWith("__") && field.endsWith("__")) {
         derivedFields.push(field)
       } else {
         importedFields.push(field)
@@ -198,6 +198,71 @@ export function getAlignmentAnnotationFields(alignment: TAlignment) {
     }  
   }
   return { importedFields, derivedFields }
+}
+
+export function updateAnnotations(
+  annotations: TAlignmentAnnotations, 
+  annotationFields: TSequenceAnnotationFields,
+  matchOnField: string, 
+  data: Record<string, string>[],
+): [TAlignmentAnnotations | undefined, TSequenceAnnotationFields | undefined, number] {
+  const updatedAnnotations: TAlignmentAnnotations = {...annotations}
+  const updatedAnnotationFields: TSequenceAnnotationFields = {...annotationFields}
+  let updatedCount = 0
+
+  for (const row of data) {
+    const sequenceIndex = updatedAnnotations.__id__.indexOf(row[matchOnField])
+    if (sequenceIndex === -1) {
+      continue
+    }
+
+    ++updatedCount
+    for (const field of getObjectKeys(row)) {
+      if (field === matchOnField) {
+        continue
+      }
+
+      const valueString = row[field]
+      const valueNumber = parseFloat(valueString)
+      let fieldValue: string | number
+      let number = 0, string = 0
+      if (isNaN(valueNumber)) {
+        string = 1
+        fieldValue = valueString
+      } else {
+        number = 1
+        fieldValue = valueNumber
+      }
+  
+      if (field in updatedAnnotationFields) {
+        const oldValue = updatedAnnotations[field][sequenceIndex]
+        if (oldValue === undefined) {
+          //
+        } else if (isNumber(oldValue)) {
+          --updatedAnnotationFields[field].number
+        } else {
+          --updatedAnnotationFields[field].string
+        }
+        updatedAnnotations[field][sequenceIndex] = fieldValue
+        updatedAnnotationFields[field].string += string
+        updatedAnnotationFields[field].number += number
+      } else {
+        updatedAnnotationFields[field] = {
+          name: formatFieldName(field), 
+          string,
+          number,
+        }
+        updatedAnnotations[field] = new Array(updatedAnnotations.__id__.length).fill(undefined)
+        updatedAnnotations[field][sequenceIndex] = fieldValue
+      }
+    }
+  }
+
+  return [
+    (updatedCount > 0) ? updatedAnnotations : undefined, 
+    (updatedCount > 0) ? updatedAnnotationFields : undefined, 
+    updatedCount
+  ]
 }
 
 function calcPSSM(
@@ -447,7 +512,7 @@ export function shouldBeStyledFactory(
 export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortParams[]): number[] {
   let sortedIndices: number[]
   if (!sortBy || (sortBy.length === 0)) {
-    if (alignment.groupBy === undefined) {
+    if (alignment.groupBy === false) {
       sortedIndices = range(0, alignment.depth)
     } else { // sort by group index
       sortedIndices = []
@@ -461,7 +526,7 @@ export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortPara
   }
 
   let actualSortBy: TAlignmentSortParams[]
-  if (alignment.groupBy !== undefined) {
+  if (alignment.groupBy !== false) {
     const groupSortBy: TAlignmentSortParams[] = []
     const otherSortBy: TAlignmentSortParams[] = []
     let sortByGroupIndex = false
@@ -526,10 +591,10 @@ export function setReferenceSequence(alignment: TAlignment, referenceSequenceInd
   return alignment
 }
 
-export function groupByField(alignment: TAlignment, groupBy?: string | number): TAlignment {
+export function groupByField(alignment: TAlignment, groupBy: string | number | false): TAlignment {
   alignment.groupBy = groupBy
   alignment.groups = []
-  if (groupBy === undefined) {
+  if (groupBy === false) {
     for (const [k, v] of Object.entries(DEFAULT_GROUP_ANNOTATION_VALUES)) {
       for (let i = 0; i < alignment.depth; ++i) {
         alignment.annotations[k][i] = v

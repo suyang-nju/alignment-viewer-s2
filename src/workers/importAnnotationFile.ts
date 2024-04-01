@@ -1,3 +1,7 @@
+import type { TAlignmentAnnotations, TSequenceAnnotationFields } from '../lib/types'
+
+import { updateAnnotations } from '../lib/alignment'
+
 import Papa from 'papaparse'
 import { expose } from 'threads/worker'
 
@@ -34,8 +38,8 @@ expose({
     return (lineCount === PREVIEW_LINE_COUNT) ? fileContent.substring(0, pos) : fileContent
   },
 
-  parse(delimiter: string) {
+  update(delimiter: string, matchOnField: string, annotations: TAlignmentAnnotations, annotationFields: TSequenceAnnotationFields) {
     const result = Papa.parse(fileContent, {header: true, delimiter})
-    return result.data
+    return updateAnnotations(annotations, annotationFields, matchOnField, result.data as Record<string, string>[])
   }
 })

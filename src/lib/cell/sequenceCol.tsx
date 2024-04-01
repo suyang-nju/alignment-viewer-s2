@@ -7,56 +7,56 @@ import { TableColCellWithEventsAndSequence } from './base'
 
 export class SequenceColCell extends TableColCellWithEventsAndSequence {
   groupByIndicatorShape?: IShape
-  updateInteractiveBgShape?: () => void
+  // updateInteractiveBgShape?: () => void
 
-  protected initCell(): void {
-    super.initCell()
-    this.updateInteractiveBgShape = /*debounce(*/() => {
-      if (!this.spreadsheet.mousemoveEventInfo) {
-        return
-      }
+  // protected initCell(): void {
+  //   super.initCell()
+  //   this.updateInteractiveBgShape = /*debounce(*/() => {
+  //     if (!this.spreadsheet.mousemoveEventInfo) {
+  //       return
+  //     }
   
-      const { event, target, viewMeta, iconName } = this.spreadsheet.mousemoveEventInfo
-      if (viewMeta.colIndex !== this.getMeta().colIndex) {
-        return
-      }
+  //     const { event, target, viewMeta, iconName } = this.spreadsheet.mousemoveEventInfo
+  //     if (viewMeta.colIndex !== this.getMeta().colIndex) {
+  //       return
+  //     }
 
-      const { residueWidth } = this.spreadsheet.avStore.dimensions
-      const info = this.getContextualInfo(event, target, viewMeta, iconName)
-      const { x: cellX } = this.getCellArea()
-      if (info?.col) {
-        const x = (info.col - 1) * residueWidth + cellX
-        const interactiveBgShape = this.stateShapes.get("interactiveBgShape")
-        if (interactiveBgShape?.attr("x") !== x) {
-          interactiveBgShape?.attr("x", x)
-        }
-      }
-    }/*, 5, {leading: true, trailing: true})*/
+  //     const { residueWidth } = this.spreadsheet.avStore.dimensions
+  //     const info = this.getContextualInfo(event, target, viewMeta, iconName)
+  //     const { x: cellX } = this.getCellArea()
+  //     if (info?.col) {
+  //       const x = (info.col - 1) * residueWidth + cellX
+  //       const interactiveBgShape = this.stateShapes.get("interactiveBgShape")
+  //       if (interactiveBgShape?.attr("x") !== x) {
+  //         interactiveBgShape?.attr("x", x)
+  //       }
+  //     }
+  //   }/*, 5, {leading: true, trailing: true})*/
 
-    this.spreadsheet.on(S2Event.GLOBAL_MOUSE_MOVE, this.updateInteractiveBgShape)
-  }
+  //   this.spreadsheet.on(S2Event.GLOBAL_MOUSE_MOVE, this.updateInteractiveBgShape)
+  // }
 
-  remove(destroy?: boolean | undefined): void {
-    this.spreadsheet.off(S2Event.GLOBAL_MOUSE_MOVE, this.updateInteractiveBgShape)
-    super.remove(destroy)
-  }
+  // remove(destroy?: boolean | undefined): void {
+  //   this.spreadsheet.off(S2Event.GLOBAL_MOUSE_MOVE, this.updateInteractiveBgShape)
+  //   super.remove(destroy)
+  // }
 
-  protected drawInteractiveBgShape() {
-    this.stateShapes.set(
-      'interactiveBgShape',
-      renderRect(
-        this,
-        {
-          ...this.getCellArea(),
-          height: this.theme.colCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
-          width: this.spreadsheet.avStore.dimensions.residueWidth,
-        },
-        {
-          visible: false,
-        },
-      ),
-    )
-  }
+  // protected drawInteractiveBgShape() {
+  //   this.stateShapes.set(
+  //     'interactiveBgShape',
+  //     renderRect(
+  //       this,
+  //       {
+  //         ...this.getCellArea(),
+  //         height: this.theme.colCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
+  //         width: this.spreadsheet.avStore.dimensions.residueWidth,
+  //       },
+  //       {
+  //         visible: false,
+  //       },
+  //     ),
+  //   )
+  // }
 
   // protected drawInteractiveBgShape(): void {}
   // protected drawTextShape(): void {}

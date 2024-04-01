@@ -1,11 +1,11 @@
 import type { TAlignmentViewerProps, TAVColorTheme } from '../lib/types'
 
 import { theme as antdTheme } from 'antd'
-import { useMemo } from 'react'
+import { useMemo, forwardRef } from 'react'
 
 import AlignmentViewer from './AlignmentViewer'
 
-export default function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerProps, "colorTheme">) {
+export default forwardRef(function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerProps, "colorTheme">, ref) {
   const antdThemeToken = antdTheme.useToken().token
   const colorTheme: TAVColorTheme = useMemo(() => (
     props.darkMode ? {
@@ -48,5 +48,5 @@ export default function AlignmentViewerAntdWrapper(props: Omit<TAlignmentViewerP
     antdThemeToken.colorText, 
     antdThemeToken.colorPrimary
   ])
-  return <AlignmentViewer {...props} colorTheme={colorTheme} />
-}
+  return <AlignmentViewer ref={ref} {...props} colorTheme={colorTheme} />
+})

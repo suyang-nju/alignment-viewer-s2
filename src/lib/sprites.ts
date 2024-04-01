@@ -84,15 +84,17 @@ export default class Sprites {
           ctx.fillStyle = fg
         }
   
-        if (key in fontActualBoundingBoxAscents) {
-          // ctx.textBaseline = "alphabetic"
-          const ascent = fontActualBoundingBoxAscents[key]
-          const descent = fontActualBoundingBoxDescents[key]
-          ctx.fillText(key, spriteWidth / 2, (spriteHeight + ascent - descent) / 2)
-        } else {
-          ctx.textBaseline = "middle"
-          ctx.fillText(key, spriteWidth / 2, spriteHeight / 2)
-        }
+        ctx.textBaseline = "middle"
+        ctx.fillText(key, spriteWidth / 2, spriteHeight / 2)
+        // if (key in fontActualBoundingBoxAscents) {
+        //   ctx.textBaseline = "alphabetic"
+        //   const ascent = fontActualBoundingBoxAscents[key]
+        //   const descent = fontActualBoundingBoxDescents[key]
+        //   ctx.fillText(key, spriteWidth / 2, (spriteHeight + ascent - descent) / 2)
+        // } else {
+        //   ctx.textBaseline = "middle"
+        //   ctx.fillText(key, spriteWidth / 2, spriteHeight / 2)
+        // }
       }
     }
 

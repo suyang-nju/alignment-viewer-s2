@@ -42,7 +42,7 @@ export type TSequenceAnnotationFields = {
 export type TAlignmentPositionsToStyle = "all" | "differentFromReference" | "sameAsReference" | "differentFromConsensus" | "sameAsConsensus"
 
 type TBaseSequenceAnnotations = /*(typeof DEFAULT_GROUP_ANNOTATION_VALUES) &*/ {
-  id: string,
+  __id__: string,
   __actualId__: string,
   __sequenceIndex__: number,
   __begin__: number,
@@ -124,9 +124,9 @@ export type TAlignment = {
   sequences: string[], 
   referenceSequenceIndex: number,
   annotations: TAlignmentAnnotations,
-  positionalAnnotations: TAlignmentPositionalAnnotations,
   annotationFields: TSequenceAnnotationFields,
-  groupBy: string | number | undefined,
+  positionalAnnotations: TAlignmentPositionalAnnotations,
+  groupBy: string | number | false,
   groups: TSequenceGroup[],
 }
 
@@ -148,7 +148,7 @@ export type TAVExtraOptions = {
   positionsToStyle: TAlignmentPositionsToStyle, 
   hideUnstyledPositions: boolean,
   sprites: Sprites, 
-  alignment: TAlignment | null, 
+  alignment: TAlignment | undefined, 
   collapsedGroups: number[],
   sortedDisplayedIndices: number[], 
   firstSequenceRowIndex: number, 
@@ -312,13 +312,12 @@ export type TDimensions = {
 export type TAlignmentViewerProps = {
   className?: string,
   style?: CSSProperties,
-  alignment: TAlignment,
-  referenceSequenceIndex?: number,
-  pinnedColumns?: string[],
-  otherVisibleColumns?: string[],
-  sortBy?: TAlignmentSortParams[],
-  groupBy?: string | number,
-  collapsedGroups?: number[],
+  fileOrUrl: File | string,
+  referenceSequenceIndex: number | undefined,
+  pinnedColumns: string[] | undefined,
+  otherVisibleColumns: string[] | undefined,
+  sortBy: TAlignmentSortParams[] | undefined,
+  groupBy: string | number | false | undefined,
   zoom?: number,
   isOverviewMode?: boolean,
   toggles?: TAlignmentViewerToggles,
@@ -333,13 +332,14 @@ export type TAlignmentViewerProps = {
   colorTheme: TAVColorTheme,
   darkMode?: boolean,
   adaptiveContainerRef?: MutableRefObject<HTMLElement | null>,
+  onLoadAlignment?: (alignment: TAlignment | undefined, isLoading: boolean, error: unknown) => void,
+  onChangeAlignment?: (alignment: TAlignment) => void,
+  onChangeSortBy?: (sortBy: TAlignmentSortParams[]) => void,
+  onChangePinnedColumns?: (pinnedColumns: string[]) => void,
+  onChangeOtherVisibleColumns?: (otherVisibleColumns: string[]) => void,
   onMouseHover?: TSetContextualInfo,
-  onSortActionIconClick?: (field: string) => void,
-  onExpandCollapseGroupIconClick?: (groupIndex: number) => void,
-  onExpandCollapseAllGroupsIconClick?: () => void,
   onContextMenu?: (info: TAVMouseEventInfo) => void,
   onBusy?: (isBusy: boolean) => void,
-  onGroupsChanged?: (groups: TSequenceGroup[]) => void,
 }
 
 export type TFileOrUrlPickerProps = {

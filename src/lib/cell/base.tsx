@@ -140,11 +140,11 @@ function withEvents<TBase extends TAVTableCellConstructor>(Base: TBase) {
 
       let sequenceId: string | undefined = undefined
       if (sequenceIndex === "$$reference$$") {
-        sequenceId = alignment.annotations.id[alignment.referenceSequenceIndex]
+        sequenceId = alignment.annotations.__id__[alignment.referenceSequenceIndex]
       } else if (sequenceIndex === "$$consensus$$") {
         sequenceId = "Consensus Sequence"
       } else if (isNumber(sequenceIndex)) {
-        sequenceId = alignment.annotations.id[sequenceIndex]
+        sequenceId = alignment.annotations.__id__[sequenceIndex]
         if (restOfGroup) {
           sequenceId = `Group: ${sequenceId} + ${restOfGroup} sequences`
         }
