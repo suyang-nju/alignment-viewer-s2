@@ -246,15 +246,25 @@ body {
   border-spacing: 0;
 }
 
+.preview-csv tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent);
+}
+
 .preview-csv td {
   white-space: nowrap;
-  padding: var(--ant-padding-xs) var(--ant-padding-sm);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: min(50vh, 250px);
+  padding: var(--ant-padding-xxs) var(--ant-padding-sm);
   border-right: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
 }
 
 .preview-csv th {
   white-space: nowrap;
-  padding: var(--ant-padding-xs) var(--ant-padding-sm);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: min(50vh, 250px);
+  padding: var(--ant-padding-xxs) var(--ant-padding-sm);
   border-right: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
   border-bottom: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
   background-color: var(--ant-color-border-secondary);

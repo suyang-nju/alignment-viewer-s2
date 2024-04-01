@@ -5,7 +5,7 @@ import { updateAnnotations } from '../lib/alignment'
 import Papa from 'papaparse'
 import { expose } from 'threads/worker'
 
-const PREVIEW_LINE_COUNT = 10
+const PREVIEW_LINE_COUNT = 50
 
 let fileContent = ""
 

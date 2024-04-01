@@ -227,6 +227,9 @@ export default function Chrome() {
   const [contextualInfoContainer, setContextualInfoContainer] = useState("status bar")
   const systemDarkMode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [darkMode, setDarkMode] = useState(systemDarkMode)
+  if (document.documentElement.style.colorScheme !== (darkMode ? "dark" : "light")) {
+    document.documentElement.style.colorScheme = darkMode ? "dark" : "light"
+  }
 
   useEffect(() => {
     function handleSystemDarkModeChange(event: MediaQueryListEvent) {
