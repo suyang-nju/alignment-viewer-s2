@@ -1,69 +1,16 @@
 import type { IShape } from '@antv/g-canvas'
 
 import { isNumber } from 'lodash'
-import { S2Event, renderRect } from '@antv/s2'
 
 import { TableColCellWithEventsAndSequence } from './base'
 
 export class SequenceColCell extends TableColCellWithEventsAndSequence {
   groupByIndicatorShape?: IShape
-  // updateInteractiveBgShape?: () => void
-
-  // protected initCell(): void {
-  //   super.initCell()
-  //   this.updateInteractiveBgShape = /*debounce(*/() => {
-  //     if (!this.spreadsheet.mousemoveEventInfo) {
-  //       return
-  //     }
-  
-  //     const { event, target, viewMeta, iconName } = this.spreadsheet.mousemoveEventInfo
-  //     if (viewMeta.colIndex !== this.getMeta().colIndex) {
-  //       return
-  //     }
-
-  //     const { residueWidth } = this.spreadsheet.avStore.dimensions
-  //     const info = this.getContextualInfo(event, target, viewMeta, iconName)
-  //     const { x: cellX } = this.getCellArea()
-  //     if (info?.col) {
-  //       const x = (info.col - 1) * residueWidth + cellX
-  //       const interactiveBgShape = this.stateShapes.get("interactiveBgShape")
-  //       if (interactiveBgShape?.attr("x") !== x) {
-  //         interactiveBgShape?.attr("x", x)
-  //       }
-  //     }
-  //   }/*, 5, {leading: true, trailing: true})*/
-
-  //   this.spreadsheet.on(S2Event.GLOBAL_MOUSE_MOVE, this.updateInteractiveBgShape)
-  // }
-
-  // remove(destroy?: boolean | undefined): void {
-  //   this.spreadsheet.off(S2Event.GLOBAL_MOUSE_MOVE, this.updateInteractiveBgShape)
-  //   super.remove(destroy)
-  // }
-
-  // protected drawInteractiveBgShape() {
-  //   this.stateShapes.set(
-  //     'interactiveBgShape',
-  //     renderRect(
-  //       this,
-  //       {
-  //         ...this.getCellArea(),
-  //         height: this.theme.colCell?.cell?.interactionState?.hover?.borderWidth ?? 4,
-  //         width: this.spreadsheet.avStore.dimensions.residueWidth,
-  //       },
-  //       {
-  //         visible: false,
-  //       },
-  //     ),
-  //   )
-  // }
-
-  // protected drawInteractiveBgShape(): void {}
   // protected drawTextShape(): void {}
 
   protected drawGroupByIndicatorShape(): void {
-    const avStore = this.spreadsheet.avStore
-    const alignment = avStore.alignment
+    const avExtraOptions = this.spreadsheet.options.avExtraOptions
+    const alignment = avExtraOptions.alignment
     const groupBy = alignment?.groupBy
     if (!isNumber(groupBy)) {
       return
@@ -76,7 +23,7 @@ export class SequenceColCell extends TableColCellWithEventsAndSequence {
       return
     }
 
-    const dimensions = avStore.dimensions
+    const dimensions = avExtraOptions.dimensions
     const { residueWidth } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
     const lineWidth = 1
@@ -154,7 +101,7 @@ export class SequenceColCell extends TableColCellWithEventsAndSequence {
   */
 
   drawContent() {
-    if (this.spreadsheet.avStore.isOverviewMode) {
+    if (this.spreadsheet.options.avExtraOptions.isOverviewMode) {
       return
     }
 
@@ -194,7 +141,7 @@ export class SequenceColCell extends TableColCellWithEventsAndSequence {
       residueNumberHeight, 
       residueWidth, 
       residueFontWidth
-    } = this.spreadsheet.avStore.dimensions
+    } = this.spreadsheet.options.avExtraOptions.dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
 
     let x = cellX + sequencePositionStart * residueWidth + (residueWidth + residueFontWidth)/2

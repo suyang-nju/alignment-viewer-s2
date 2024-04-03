@@ -1,6 +1,5 @@
 import type { Event as GraphEvent } from '@antv/g-canvas'
-import type { S2CellType, ViewMeta } from '@antv/s2'
-import type { TContextualInfo } from '../types'
+import type { TAVMouseEventInfo } from '../types'
 
 import { isNil } from 'lodash'
 
@@ -9,7 +8,7 @@ import { TableDataCellWithEventsAndSequence } from './base'
 
 export class BarDataCell extends TableDataCellWithEventsAndSequence {
   protected getBarHeightRatios(start: number, end: number): number[] {
-    const alignment = this.spreadsheet.avStore.alignment
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment
     if (!alignment) {
       return []
     }
@@ -105,11 +104,11 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
   */
 
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {    
-    const avStore = this.spreadsheet.avStore
+    const avExtraOptions = this.spreadsheet.options.avExtraOptions
     const visibleSequencePositionStart = this.spreadsheet.visibleSequencePositionStart
-    const barSprites = avStore.barSprites
-    const dimensions = avStore.dimensions
-    const alignment = avStore.alignment
+    const barSprites = avExtraOptions.barSprites
+    const dimensions = avExtraOptions.dimensions
+    const alignment = avExtraOptions.alignment
     if (!alignment) {
       return
     }
@@ -159,51 +158,46 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
     }
   }
 
-  getContextualInfo(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta, iconName?: string): TContextualInfo | undefined {
-    const alignment = this.spreadsheet.avStore.alignment
-    if (!alignment) {
-      return
+  getMouseEventInfo(event: GraphEvent): TAVMouseEventInfo {
+    const avmei = super.getMouseEventInfo(event)
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment
+    if (alignment) {
+      const sequencePosition = avmei.sequencePosition
+      const sequenceIndex = avmei.sequenceIndex as keyof typeof SPECIAL_ROWS
+      const key = sequenceIndex
+      const className = sequenceIndex
+      let value, digits
+      switch (sequenceIndex) {
+        case "$$coverage$$":
+          value = alignment.positionalAnnotations.coverage[sequencePosition] * 100
+          digits = 0
+          break
+        case "$$conservation$$":
+          value = alignment.positionalAnnotations.conservation[sequencePosition]
+          digits = 2
+          break
+        case "$$entropy$$":
+          value = alignment.positionalAnnotations.entropy.values[sequencePosition]
+          digits = 2
+          break
+        case "$$kl divergence$$":
+          value = alignment.positionalAnnotations.klDivergence.values[sequencePosition]
+          digits = 2
+          break
+      }
+  
+      let text = SPECIAL_ROWS[sequenceIndex].label
+      if (!isNil(value)) {
+        text += ": " + value.toFixed(digits)
+      }
+      if (sequenceIndex === "$$coverage$$") {
+        text += "%"
+      }
+  
+      avmei.extraInfo = [<div key={key} className={className}>{text}</div>]
     }
 
-    const info = super.getContextualInfo(event, target, viewMeta, iconName)
-    if (!info) {
-      return
-    }
-
-    const residueIndex = info.residueIndex as number
-    const sequenceIndex = info.sequenceIndex as keyof typeof SPECIAL_ROWS
-    const key = sequenceIndex
-    const className = sequenceIndex
-    let value, digits
-    switch (sequenceIndex) {
-      case "$$coverage$$":
-        value = alignment.positionalAnnotations.coverage[residueIndex] * 100
-        digits = 0
-        break
-      case "$$conservation$$":
-        value = alignment.positionalAnnotations.conservation[residueIndex]
-        digits = 2
-        break
-      case "$$entropy$$":
-        value = alignment.positionalAnnotations.entropy.values[residueIndex]
-        digits = 2
-        break
-      case "$$kl divergence$$":
-        value = alignment.positionalAnnotations.klDivergence.values[residueIndex]
-        digits = 2
-        break
-    }
-
-    let text = SPECIAL_ROWS[sequenceIndex].label
-    if (!isNil(value)) {
-      text += ": " + value.toFixed(digits)
-    }
-    if (sequenceIndex === "$$coverage$$") {
-      text += "%"
-    }
-
-    info.content = [<div key={key} className={className}>{text}</div>]
-    return info
+    return avmei
   }
 }
 

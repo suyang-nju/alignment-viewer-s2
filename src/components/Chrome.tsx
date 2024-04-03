@@ -7,7 +7,7 @@ import type {
   TAlignmentColorMode,
   TAlignmentViewerToggles, 
   TContextualInfo, 
-  TSetContextualInfo, 
+  TSetMouseEventInfo, 
   TAVMouseEventInfo,
 } from '../lib/types'
 import type { MouseEvent, ReactNode } from 'react'
@@ -48,30 +48,30 @@ function BusyIndicator(props: Record<string, any>) {
 
 
 const StatusBar = forwardRef(function StatusBar(props, ref) {
-  const [contextualInfo, setContextualInfo] = useState<TContextualInfo | undefined>(undefined)
+  const [mouseEventInfo, setMouseEventInfo] = useState<TAVMouseEventInfo | undefined>(undefined)
 
   useImperativeHandle(ref, () => (info?: TAVMouseEventInfo) => {
-    setContextualInfo(info?.contextualInfo)
+    setMouseEventInfo(info)
   }, [])
 
   const body: ReactNode[] = []
-  if (contextualInfo) {
-    if (contextualInfo.row || contextualInfo.col) { 
+  if (mouseEventInfo) {
+    if ((mouseEventInfo.sequenceRowIndex >= 0) || (mouseEventInfo.sequencePosition >= 0)) { 
       body.push(
         <Flex key="row-col" className="row-col">
-          {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
-          {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
+          {(mouseEventInfo.sequenceRowIndex >= 0) && <div key="row" className="row">Row {mouseEventInfo.sequenceRowIndex + 1}</div>}
+          {(mouseEventInfo.sequencePosition >= 0) && <div key="col" className="col">Col {mouseEventInfo.sequencePosition + 1}</div>}
         </Flex>
       )
     }
     
-    if (contextualInfo.sequenceId) {
+    if (mouseEventInfo.sequenceId) {
       body.push(
-        <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>
+        <div key="sequenceId" className="sequence-id">{mouseEventInfo.sequenceId}</div>
       )
     }
     
-    for (const node of contextualInfo.content) {
+    for (const node of mouseEventInfo.extraInfo) {
       body.push(node)
     }
   }
@@ -90,40 +90,45 @@ const StatusBar = forwardRef(function StatusBar(props, ref) {
 })
 
 const ContextualInfoTooltip = forwardRef(function ContextualInfoTooltip(props, ref) {
-  const [contextualInfo, setContextualInfo] = useState<TContextualInfo | undefined>(undefined)
+  const [mouseEventInfo, setMouseEventInfo] = useState<TAVMouseEventInfo | undefined>(undefined)
   const timeoutRef = useRef(0)
 
   useImperativeHandle(ref, () => debounce((info?: TAVMouseEventInfo) => {
-    setContextualInfo(info?.contextualInfo)
+    setMouseEventInfo(info)
   }, 100, {leading: false, trailing: true}), [])
 
   if (timeoutRef.current) {
     window.clearTimeout(timeoutRef.current)
   }
   
-  timeoutRef.current = window.setTimeout(() => { setContextualInfo(undefined) }, 10000)
+  timeoutRef.current = window.setTimeout(() => { setMouseEventInfo(undefined) }, 10000)
 
-  if (!contextualInfo) {
+  if (!mouseEventInfo) {
     return null
   } else {
     const body = (
       <>
         <div className="contextual-info-tooltip-header">
-          {(contextualInfo.row || contextualInfo.col) && (
+          {((mouseEventInfo.sequenceRowIndex >= 0) || (mouseEventInfo.sequencePosition >= 0)) && (
             <div key="row-col" className="row-col">
-              {contextualInfo.row && <div key="row" className="row">Row {contextualInfo.row}</div>}
-              {contextualInfo.col && <div key="col" className="col">Col {contextualInfo.col}</div>}
+              {(mouseEventInfo.sequenceRowIndex >= 0) && <div key="row" className="row">Row {mouseEventInfo.sequenceRowIndex + 1}</div>}
+              {(mouseEventInfo.sequencePosition >= 0) && <div key="col" className="col">Col {mouseEventInfo.sequencePosition + 1}</div>}
             </div>
           )}
-          {contextualInfo.sequenceId && <div key="sequenceId" className="sequence-id">{contextualInfo.sequenceId}</div>}
+          {mouseEventInfo.sequenceId && <div key="sequenceId" className="sequence-id">{mouseEventInfo.sequenceId}</div>}
         </div>
         <div className="contextual-info-tooltip-body">
-          {contextualInfo.content}
+          {mouseEventInfo.extraInfo}
         </div>
       </>
     )
 
     const { className, ...otherProps } = props
+    const left = mouseEventInfo.visible.left + mouseEventInfo.event.clientX - mouseEventInfo.event.x
+    const top = mouseEventInfo.visible.top + mouseEventInfo.event.clientY - mouseEventInfo.event.y
+    const width = mouseEventInfo.visible.width
+    const height = mouseEventInfo.visible.height
+    // const matrix = `matrix(${width}, 0, 0, ${height}, ${left}, ${top})`
     return (
       <Tooltip 
         title={body}
@@ -135,16 +140,27 @@ const ContextualInfoTooltip = forwardRef(function ContextualInfoTooltip(props, r
         {...otherProps} 
       >
         <div
-          key={contextualInfo.key}
+          key={mouseEventInfo.key}
           style={{
             pointerEvents: "none",
             position: "absolute",
-            left: contextualInfo.anchorX,
-            top: contextualInfo.anchorY,
-            width: contextualInfo.anchorWidth,
-            height: contextualInfo.anchorHeight,
+            left,
+            top,
+            width,
+            height,
             visibility: "hidden",
           }}
+          // style={{
+          //   pointerEvents: "none",
+          //   position: "absolute",
+          //   left: 0,
+          //   top: 0,
+          //   width: 1,
+          //   height: 1,
+          //   transformOrigin: "top left",
+          //   transform: matrix,
+          //   visibility: "hidden",
+          // }}
         />
       </Tooltip>
     )
@@ -210,7 +226,7 @@ export default function Chrome() {
     updateAnnotations:(updatedAnnotations: TAlignmentAnnotations, updatedAnnotationFields: TSequenceAnnotationFields) => void 
   }>(null)
   const settingsRef = useRef<{ open: () => void, close: () => void }>(null)
-  const setContextualInfoRef = useRef<undefined | TSetContextualInfo>(undefined)
+  const setContextualInfoRef = useRef<undefined | TSetMouseEventInfo>(undefined)
   const cursorTrackerRef = useRef<undefined | ((info?: TAVMouseEventInfo) => void)>(undefined)
   const arrangeColumnsRef = useRef<{open: () => void}>(null)
   const sortByColumnsRef = useRef<{open: () => void}>(null)
@@ -389,22 +405,6 @@ export default function Chrome() {
     setError(error)
   }, [])
 
-  // derived states, needs to be updated / re-initialized upon alignment change
-  // useEffect(() => {
-  //   if (fileOrUrl !== prevFileOrUrl) {
-  //     setPrevFileOrUrl(fileOrUrl)
-  //     // Set the following to `undefined` to indicate we want to use default values (derived from alignment)
-  //     setReferenceSequenceIndex(undefined)
-  //     setPinnedColumns(undefined)
-  //     setOtherVisibleColumns(undefined)
-  //     setSortBy(undefined)
-  //     setGroupBy(undefined)
-  //   }
-  // }, [
-  //   fileOrUrl, 
-  //   prevFileOrUrl,
-  // ])
-
   let displayFileName: string | ReactNode = ""
   if (alignment) {
     displayFileName = (
@@ -414,7 +414,7 @@ export default function Chrome() {
     )
   }
 
-  const [contextMenuTarget, setContextMenuTarget] = useState<TAVMouseEventInfo>()
+  const [contextMenuEventInfo, setContextMenuEventInfo] = useState<TAVMouseEventInfo>()
   const contextMenu = useMemo((): MenuProps => {
     return createContextMenu({
       isOverviewMode,
@@ -426,7 +426,7 @@ export default function Chrome() {
       pinnedColumns,
       sortBy, 
       groupBy,
-      contextMenuTarget, 
+      contextMenuEventInfo: contextMenuEventInfo, 
       paddingXS: antdThemeToken.paddingXS,
       setOtherVisibleColumns,
       setPinnedColumns,
@@ -447,7 +447,7 @@ export default function Chrome() {
     pinnedColumns,
     sortBy, 
     groupBy,
-    contextMenuTarget, 
+    contextMenuEventInfo, 
     antdThemeToken.paddingXS,
   ])
 
@@ -524,7 +524,6 @@ export default function Chrome() {
         alignmentColorMode={colorMode}
         positionsToStyle={positionsToStyle}
         hideUnstyledPositions={hideUnstyledPositions}
-        // highlightCurrentSequence={true}
         darkMode={darkMode}
         adaptiveContainerRef={adaptiveContainerRef}
         onChangeAlignment={handleChangeAlignment}
@@ -533,7 +532,7 @@ export default function Chrome() {
         onChangeSortBy={handleChangeSortBy}
         onLoadAlignment={handleLoadAlignment}
         onMouseHover={handleAlignmentViewerMouseHover}
-        onContextMenu={setContextMenuTarget}
+        onContextMenu={setContextMenuEventInfo}
         onBusy={handleAlignmentViewerBusy}
       />
     )
@@ -565,9 +564,9 @@ export default function Chrome() {
     if (!alignment) {
       return null
     } else  if (contextualInfoContainer === "status bar") {
-      return <StatusBar ref={(setContent: TSetContextualInfo) => {setContextualInfoRef.current = setContent}} />
+      return <StatusBar ref={setContextualInfoRef} />
     } else {
-      return <ContextualInfoTooltip ref={(setContent: TSetContextualInfo) => {setContextualInfoRef.current = setContent}} />
+      return <ContextualInfoTooltip ref={setContextualInfoRef} />
     }  
   }, [alignment, contextualInfoContainer])
 

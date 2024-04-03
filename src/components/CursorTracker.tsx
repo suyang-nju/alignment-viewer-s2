@@ -1,16 +1,21 @@
-import type { TContextualInfo, TAVMouseEventInfo } from '../lib/types'
+import type { TNormalizedPosition, TAVMouseEventInfo } from '../lib/types'
 
 import { useState, forwardRef, useImperativeHandle } from "react"
 
 export default forwardRef(function CursorTracker(props, ref) {
-  const [contextualInfo, setContextualInfo] = useState<TContextualInfo | undefined>(undefined)
+  const [visible, setVisible] = useState<TAVMouseEventInfo["visible"] | undefined>(undefined)
 
   useImperativeHandle(ref, () => (info?: TAVMouseEventInfo) => {
-    setContextualInfo(info?.contextualInfo)
+    setVisible(info?.visible)
   }, [])
 
-  const xTrackerMatrix = `matrix(${contextualInfo?.anchorWidth}, 0, 0, 1, ${contextualInfo?.anchorX}, 0)`
-  const yTrackerMatrix = `matrix(1, 0, 0, ${contextualInfo?.anchorHeight}, 0, ${contextualInfo?.anchorY})`
+  let left = 0, top = 0, width = 0, height = 0
+  if (visible) {
+    ({left, top, width, height} = visible)
+  }
+
+  const xTrackerMatrix = `matrix(${width}, 0, 0, 1, ${left}, 0)`
+  const yTrackerMatrix = `matrix(1, 0, 0, ${height}, 0, ${top})`
 
   return (
     <>

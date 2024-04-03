@@ -6,7 +6,6 @@ import type {
   LayoutResult, 
   ResizeParams,
   SpreadSheet, 
-  ViewMeta, 
   S2CellType, 
   HeaderIconClickParams, 
 } from '@antv/s2'
@@ -21,11 +20,11 @@ import type {
   TSequenceAnnotationFields,
   TAlignmentSortParams, 
   TAlignmentViewerToggles,
-  TContextualInfo,
   TAVMouseEventInfo,
   TDimensions,
   TAlignmentViewerProps,
-  TAlignmentPositionsToStyle, 
+  TAlignmentPositionsToStyle,
+  TAVTableSheetOptions, 
 } from '../lib/types'
 
 import {
@@ -311,23 +310,6 @@ function useDimensions(
   ])
 }
 
-function getAVMouseEventInfo(data: TargetCellInfo): TAVMouseEventInfo {
-  let event: CanvasEvent
-  let target: S2CellType<ViewMeta>
-  let viewMeta: ViewMeta | S2Node
-  let iconName: string | undefined
-  if (data.target instanceof GuiIcon) {
-    iconName = data.target.cfg.name
-    event = data.event
-    target = data.target.cfg.parent
-    viewMeta = target.getMeta()
-  } else {
-    ({ event, target, viewMeta } = data)
-  }
-  const contextualInfo: TContextualInfo = target?.getContextualInfo?.(event, target, viewMeta, iconName)
-
-  return { event, target, viewMeta, iconName, contextualInfo }
-}
 
 export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignmentViewerProps, ref) {
   // console.log("render av")
@@ -339,7 +321,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // console.log("alignmentColorPalette", alignmentColorPalette)
   // console.log("alignmentColorMode", alignmentColorMode)
   // console.log("positionsToStyle", positionsToStyle)
-  // console.log("highlightCurrentSequence", highlightCurrentSequence)
 
   const {
     className,
@@ -356,7 +337,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     alignmentColorMode = ALIGNMENT_COLOR_MODES[0],
     // positionsToStyle = "all",
     hideUnstyledPositions = false,
-    highlightCurrentSequence = true,
     colorTheme,
     adaptiveContainerRef,
     onLoadAlignment,
@@ -511,12 +491,11 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     }
   }, [handleSortActionIconClick])
 
-  // console.log("setS2ThemeCfg EFFECT", dimensions, scrollbarSize, highlightCurrentSequence)
+  // console.log("setS2ThemeCfg EFFECT", dimensions, scrollbarSize)
   const s2ThemeCfg = useS2ThemeCfg(
     fontFamily,
     dimensions,
     scrollbarSize,
-    highlightCurrentSequence,
     colorTheme,
   )
   // useChangeDetector()
@@ -524,7 +503,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("- fontFamily changed", fontFamily)
   // useChangeDetector("- dimensions changed", dimensions)
   // useChangeDetector("- scrollbarSize changed", scrollbarSize)
-  // useChangeDetector("- highlightCurrentSequence changed", highlightCurrentSequence)
   // useChangeDetector("- colorTheme changed", colorTheme)  
 
   // const sortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
@@ -678,7 +656,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
             }
     
             setAlignment(newAlignment)
-            console.log("new alignment for next render")
             onChangeAlignment?.(newAlignment)
           }
     
@@ -865,48 +842,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   ])
 
 
-  const columnWidthsRef = useRef<TColumnWidths>({
-    alignmentUuid: alignment?.uuid,
-    fieldWidths: {},
-    isGrouped: (alignment?.groupBy !== undefined),
-    isResizing: undefined,
-    zoom,
-  })
-
-  // console.log("setS2Options EFFECT", dimensions, highlightCurrentSequence)
-  const showMinimap = toggles["$$MiniMap$$"].visible
-  const s2Options = useS2Options(
-    alignment,
-    columns,
-    columnWidthsRef,
-    pinnedColumnsCount,
-    sortBy,
-    isCollapsedGroupAtRowIndex,
-    isOverviewMode,
-    window.devicePixelRatio,
-    dimensions, 
-    scrollbarSize,
-    showMinimap, 
-    rowHeightsByField, 
-    highlightCurrentSequence, 
-    handleColHeaderActionIconClick, 
-  )
-  // useChangeDetector()
-  // useChangeDetector("s2Options changed", s2Options)
-  // useChangeDetector("- alignment changed", alignment)
-  // useChangeDetector("- columns changed", columns)
-  // useChangeDetector("- columnWidthsRef changed", columnWidthsRef)
-  // useChangeDetector("- pinnedColumnsCount changed", pinnedColumnsCount)
-  // useChangeDetector("- sortBy changed", sortBy)
-  // useChangeDetector("- collapsedGroups changed", collapsedGroups)
-  // useChangeDetector("- isOverviewMode changed", isOverviewMode)
-  // useChangeDetector("- dimensions changed", dimensions)
-  // useChangeDetector("- scrollbarSize changed", scrollbarSize)
-  // useChangeDetector("- showMinimap changed", showMinimap)
-  // useChangeDetector("- rowHeightsByField changed", rowHeightsByField)
-  // useChangeDetector("- highlightCurrentSequence changed", highlightCurrentSequence)
-  // useChangeDetector("- handleColHeaderActionIconClick changed", handleColHeaderActionIconClick)
-  
   const sequenceLogosCommonProps = useMemo(() => {
     const logoHeight = rowHeightsByField[`${Object.keys(SPECIAL_ROWS).indexOf("$$sequence logo$$")}`] - dimensions.paddingTop - dimensions.paddingBottom
     const barMode = (zoom < SEQUENCE_LOGO_BAR_STACK_ZOOM)
@@ -1020,6 +955,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     dimensions.residueFontWidth, 
   ])
 
+  const showMinimap = toggles["$$MiniMap$$"].visible
   const avExtraOptions: TAVExtraOptions = useMemo(() => ({
     zoom, 
     isOverviewMode, 
@@ -1094,6 +1030,48 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("- barSprites changed", barSprites)
   // useChangeDetector("- scrollbarSize changed", scrollbarSize)
 
+  const columnWidthsRef = useRef<TColumnWidths>({
+    alignmentUuid: alignment?.uuid,
+    fieldWidths: {},
+    isGrouped: (alignment?.groupBy !== undefined),
+    isResizing: undefined,
+    zoom,
+  })
+
+  // console.log("setS2Options EFFECT", dimensions)
+  const s2Options = useS2Options(
+    avExtraOptions,
+    alignment,
+    columns,
+    columnWidthsRef,
+    pinnedColumnsCount,
+    sortBy,
+    isCollapsedGroupAtRowIndex,
+    isOverviewMode,
+    window.devicePixelRatio,
+    dimensions, 
+    scrollbarSize,
+    showMinimap, 
+    rowHeightsByField, 
+    handleColHeaderActionIconClick, 
+  )
+  // useChangeDetector()
+  // useChangeDetector("s2Options changed", s2Options)
+  // useChangeDetector("- alignment changed", alignment)
+  // useChangeDetector("- columns changed", columns)
+  // useChangeDetector("- columnWidthsRef changed", columnWidthsRef)
+  // useChangeDetector("- pinnedColumnsCount changed", pinnedColumnsCount)
+  // useChangeDetector("- sortBy changed", sortBy)
+  // useChangeDetector("- collapsedGroups changed", collapsedGroups)
+  // useChangeDetector("- isOverviewMode changed", isOverviewMode)
+  // useChangeDetector("- dimensions changed", dimensions)
+  // useChangeDetector("- scrollbarSize changed", scrollbarSize)
+  // useChangeDetector("- showMinimap changed", showMinimap)
+  // useChangeDetector("- rowHeightsByField changed", rowHeightsByField)
+  // useChangeDetector("- handleColHeaderActionIconClick changed", handleColHeaderActionIconClick)
+  
+
+
   const handleCellIconClick = useCallback(({ event, target, viewMeta, iconName }: TAVMouseEventInfo) => {
     // if (!alignment?.annotations) {
     //   return
@@ -1150,7 +1128,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   }, [alignment?.uuid, alignment?.groupBy, zoom])
 
   const handleDataCellHover = useCallback((data: TargetCellInfo): void => {
-    onMouseHover?.(getAVMouseEventInfo(data))
+    onMouseHover?.(s2Ref.current?.mouseMoveEventInfo)
   }, [onMouseHover])
 
   const handleNoContextualInfo = useCallback(() => {
@@ -1165,8 +1143,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     // console.log('panelScrollGroup', s2Ref.current.panelScrollGroup.getBBox())
     // console.log('panelScrollGroup clip', s2Ref.current.panelScrollGroup.getClip().getBBox())
 
-    const info = getAVMouseEventInfo(data)
-    info.target.onClick?.(info)
+    s2Ref.current?.mouseDownEventInfo?.cell.onClick?.(s2Ref.current?.mouseDownEventInfo)
     // console.log("data clicked")
   }, [])
 
@@ -1175,30 +1152,30 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   const targetRowCellWhenMouseDownRef = useRef<S2CellType | null>(null)
   
   const handleRowCellMouseDown = useCallback((data: TargetCellInfo): void => {
-    const { target, iconName } = getAVMouseEventInfo(data)
-    if (iconName) {
-      targetRowCellWhenMouseDownRef.current = target
+    if (s2Ref.current?.mouseDownEventInfo?.iconName) {
+      targetRowCellWhenMouseDownRef.current = s2Ref.current.mouseDownEventInfo.cell //target
     }
   }, [targetRowCellWhenMouseDownRef])
 
   const handleRowCellMouseUp = useCallback((data: TargetCellInfo): void => {
-    const info = getAVMouseEventInfo(data)
-    if (info.iconName && (info.target === targetRowCellWhenMouseDownRef.current)) {
+    if (
+      s2Ref.current?.mouseUpEventInfo?.iconName && 
+      (s2Ref.current?.mouseUpEventInfo?.cell === targetRowCellWhenMouseDownRef.current)
+    ) {
       // handleRowCellClick(data)
       targetRowCellWhenMouseDownRef.current = null
-      handleCellIconClick(info)
+      if (s2Ref.current?.mouseDownEventInfo) {
+        handleCellIconClick(s2Ref.current?.mouseDownEventInfo)
+      }
     }
+
   }, [handleCellIconClick])
 
   const handleContextMenu = useCallback((event: CanvasEvent) => {
-    const target = s2Ref.current?.getCell(event.target) as S2CellType
-    const viewMeta = target?.getMeta() as S2Node
-    const info = getAVMouseEventInfo({ event, target, viewMeta })
-    onContextMenu?.(info)
-  }, [
-    s2Ref, 
-    onContextMenu
-  ])
+    if (s2Ref.current?.contextMenuDownEventInfo) {
+      onContextMenu?.(s2Ref.current?.contextMenuDownEventInfo)
+    }
+  }, [onContextMenu])
 
   // const handleSelected = useCallback((cells: S2CellType[]) => {
   //   // console.log("viewer", cells.length, cells[0].cellType)
@@ -1220,15 +1197,12 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   //   console.log("destroy")
   // }, [])
 
-  const spreadsheet = useCallback((container: S2MountContainer, dataCfg: S2DataConfig, options: SheetComponentOptions) => {
+  const spreadsheet = useCallback((container: S2MountContainer, dataCfg: S2DataConfig, options: TAVTableSheetOptions) => {
     // console.log("new AVTableSheet instance")
-    return new AVTableSheet(container, dataCfg, options as S2Options, avExtraOptions)
-  }, [avExtraOptions])
+    return new AVTableSheet(container, dataCfg, options)
+  }, [])
   
   const memoizedSheetComponent = useMemo(() => {
-    // initAVStore(s2Ref.current)
-    console.log("updateavstore in memoizedSheetComponent", avExtraOptions.alignment?.name)
-    s2Ref.current?.updateAVStore(avExtraOptions)
     const adaptiveProp = (adaptiveContainerRef?.current) ? {
       width: true, 
       height: true, 
@@ -1270,12 +1244,9 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
         onLayoutResizeColWidth={handleLayoutResizeColWidth}
         onCopied={(data) => {console.log(data)}}
         onDataCellEditEnd={(meta) => {console.log('onDataCellEditEnd', meta)}}
-        onSheetUpdate={(options)=>{console.log("onSheetUpdate", options); return options}}
       />
     )
   }, [
-    // initAVStore,
-    avExtraOptions,
     adaptiveContainerRef,
     spreadsheet,
     s2Ref,
@@ -1297,20 +1268,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     handleLayoutAfterHeaderLayout,
     handleLayoutResizeColWidth,
   ])
-
-  // force s2 to re-render when only avStore changes but no props to SheetComponent change
-  const sheetComponentPropsChangedRef = useRef(false)
-  sheetComponentPropsChangedRef.current = false
-  useEffect(() => {
-    sheetComponentPropsChangedRef.current = true
-  }, [s2DataCfg, s2Options, s2ThemeCfg])
-
-  useEffect(() => {
-    if (!sheetComponentPropsChangedRef.current) {
-      console.log("force render avtable")
-      s2Ref.current?.render(false, { reBuildDataSet: false, reBuildHiddenColumnsDetail: false, reloadData: false})
-    }
-  })
 
   return (
     <div 

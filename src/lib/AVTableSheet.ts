@@ -4,8 +4,7 @@ import type {
   S2Options, ThemeCfg, ViewMeta, S2CellType, BaseCell, ScrollOffset,
   HeaderIconClickParams, HeaderActionIcon, CellDataParams, DataType, 
 } from '@antv/s2'
-import type { SheetComponentOptions } from '@antv/s2-react'
-import type { IGroup, IShape, Event as GraphEvent, BBox } from '@antv/g-canvas'
+import type { IGroup, IShape, Event as GraphEvent } from '@antv/g-canvas'
 import type {
   TAlignment, 
   TAlignmentSortParams, 
@@ -15,13 +14,14 @@ import type {
   TColumnWidths,
   TAVMouseEventInfo,
   TSelectedCellsRange,
+  TAVTableSheetOptions,
 } from './types'
 
 import { find, findIndex, countBy, debounce, isNumber, isString, isNil } from 'lodash'
 import { 
   setLang, extendLocale, TableSheet, SERIES_NUMBER_FIELD, 
   TableDataSet, PALETTE_MAP, S2Event, Node as S2Node,
-  InterceptType, copyToClipboard, GuiIcon, CopyMIMEType,
+  InterceptType, copyToClipboard, CopyMIMEType,
   CellTypes, ScrollbarPositionType, InteractionStateName,
 } from '@antv/s2'
 import { useMemo } from 'react'
@@ -66,7 +66,7 @@ export class AVDataSet extends TableDataSet {
       return undefined
     }
 
-    const alignment = this.spreadsheet.avStore.alignment!
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment!
     const rowData = this.displayData[query.rowIndex]
     const __sequenceIndex__ = rowData.__sequenceIndex__ as string | number
     if (query.field) {
@@ -122,6 +122,8 @@ type TClippingBounds = {
 }
 
 export class AVTableSheet extends TableSheet {
+  declare options: TAVTableSheetOptions
+
   public readonly id = Math.random()
   public visibleSequencePositionStart = -1
   public visibleSequencePositionEnd = -1
@@ -129,9 +131,10 @@ export class AVTableSheet extends TableSheet {
   public visibleSequenceRowIndexStart = -1
   public visibleSequenceRowIndexEnd = -1
 
-  public mousedownEventInfo?: TAVMouseEventInfo
-  public mousemoveEventInfo?: TAVMouseEventInfo
-  public mouseupEventInfo?: TAVMouseEventInfo
+  public mouseDownEventInfo?: TAVMouseEventInfo
+  public mouseMoveEventInfo?: TAVMouseEventInfo
+  public mouseUpEventInfo?: TAVMouseEventInfo
+  public contextMenuDownEventInfo?: TAVMouseEventInfo
 
   protected selectionMaskGroup?: IGroup
   protected selectionMaskShape?: IShape
@@ -149,7 +152,6 @@ export class AVTableSheet extends TableSheet {
     sequenceRowIndex: [-1, -1]
   }
 
-  public avStore: TAVExtraOptions
   protected minimapBackgroundShape?: IShape
   protected minimapShape?: IShape
   protected minimapViewportShape?: IShape
@@ -162,14 +164,8 @@ export class AVTableSheet extends TableSheet {
     
   protected checkContextLostTimeInterval: number = 0
 
-  render(reloadData?: boolean, options?: { reBuildDataSet?: boolean, reBuildHiddenColumnsDetail?: boolean }) {
-    console.log("render table", reloadData, options)
-    super.render(reloadData, options)
-  }
-
-  constructor(dom: S2MountContainer, dataCfg: S2DataConfig, options: S2Options, initialAVStore: TAVExtraOptions) {
-    super(dom, dataCfg, options)
-    this.avStore = initialAVStore
+  constructor(dom: S2MountContainer, dataCfg: S2DataConfig, options: TAVTableSheetOptions) {
+    super(dom, dataCfg, options as S2Options)
     this.on(S2Event.GLOBAL_SCROLL, this.handleScrollbarScroll.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_MOVE, this.handleGlobalMouseMove.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_UP, this.handleGlobalMouseUp.bind(this))
@@ -225,11 +221,6 @@ export class AVTableSheet extends TableSheet {
     // }, 500)
   }
 
-  updateAVStore(newAVStore: TAVExtraOptions) {
-    // console.log("***update AVStore***")
-    this.avStore = newAVStore
-  }
-
   checkCanvasScaling() {
     const ctx = this.getCanvasElement().getContext("2d")
     if (!ctx) {
@@ -260,7 +251,7 @@ export class AVTableSheet extends TableSheet {
     this.minimapViewportShape?.off("mousedown")
     super.buildFacet()
   
-    const showMinimap = this.avStore.showMinimap
+    const showMinimap = this.options.avExtraOptions.showMinimap
     if (showMinimap) {
       this.renderMinimap()
     }
@@ -292,7 +283,7 @@ export class AVTableSheet extends TableSheet {
       return
     }
 
-    const alignment = this.avStore.alignment
+    const alignment = this.options.avExtraOptions.alignment
     if (!alignment) {
       return
     }
@@ -340,7 +331,7 @@ export class AVTableSheet extends TableSheet {
 
     if (overview) {
       for (let i = this.selectedCellsRange.sequenceRowIndex[0]; i <= this.selectedCellsRange.sequenceRowIndex[1]; ++i) {
-        const formattedCellValue = alignment.sequences[this.avStore.sortedDisplayedIndices[i]].substring(
+        const formattedCellValue = alignment.sequences[this.options.avExtraOptions.sortedDisplayedIndices[i]].substring(
           this.selectedCellsRange.sequencePosition[0], this.selectedCellsRange.sequencePosition[1] + 1
         )
         formattedValues.push(formattedCellValue)
@@ -365,36 +356,22 @@ export class AVTableSheet extends TableSheet {
   }
 
   getMouseEventInfo(event: GraphEvent): TAVMouseEventInfo {
-    let target = this.getCell(event.target)
-    let viewMeta = target?.getMeta()
-    let iconName: string | undefined
-    if (target instanceof GuiIcon) {
-      iconName = target.cfg.name
-      target = target.cfg.parent
-      viewMeta = target.getMeta()
-    }
-
-    return {
-      event, 
-      target, 
-      viewMeta, 
-      iconName, 
-      normalizedPosition: target.getNormalizedPosition(event, target, viewMeta),
-      contextualInfo: undefined,
-    }
+    return this.getCell(event.target)?.getMouseEventInfo(event)
   }
 
   protected handleCellMouseDown(event: GraphEvent) {
     const { button, altKey, ctrlKey, shiftKey } = event.originalEvent as MouseEvent
     if ((button === 0) && !altKey && !ctrlKey && !shiftKey) {
       this.resetSelectedCellsRange()
-      this.mousedownEventInfo = this.getMouseEventInfo(event)
-      this.mousemoveEventInfo = this.mousedownEventInfo
+      this.mouseDownEventInfo = this.getMouseEventInfo(event)
+      this.mouseMoveEventInfo = this.mouseDownEventInfo
+    } else if (button === 2) {
+      this.contextMenuDownEventInfo = this.getMouseEventInfo(event)
     }
   }
 
   protected handleCellMouseMove(event: GraphEvent) {
-    this.mousemoveEventInfo = this.getMouseEventInfo(event)
+    this.mouseMoveEventInfo = this.getMouseEventInfo(event)
 
     if (this.isPreparingSelection) {
       this.renderSelectionMask()
@@ -402,7 +379,7 @@ export class AVTableSheet extends TableSheet {
   }
 
   protected handleCellMouseUp(event: GraphEvent) {
-    this.mouseupEventInfo = this.getMouseEventInfo(event)
+    this.mouseUpEventInfo = this.getMouseEventInfo(event)
   }
 
   resetSelectedCellsRange() {
@@ -451,17 +428,16 @@ export class AVTableSheet extends TableSheet {
       out[0] = (in1 < in2) ? in1 : in2
       out[1] = (in1 < in2) ? in2 : in1
     }
-
   }
 
   protected updateSelectedCellsRange() {
-    if (!this.mousedownEventInfo || !this.mousemoveEventInfo) {
+    if (!this.mouseDownEventInfo || !this.mouseMoveEventInfo) {
       this.resetSelectedCellsRange()
       return
     }
 
-    const down = this.mousedownEventInfo.normalizedPosition
-    const up = this.mousemoveEventInfo.normalizedPosition
+    const down = this.mouseDownEventInfo
+    const up = this.mouseMoveEventInfo
 
     const { start: lowestRowIndex, end: highestRowIndex } = this.facet.getCellRange()
     this._setRange(this.selectedCellsRange.rowIndex, down.rowIndex, up.rowIndex, lowestRowIndex, highestRowIndex)
@@ -480,7 +456,11 @@ export class AVTableSheet extends TableSheet {
     }
     this._setRange(this.selectedCellsRange.colIndex, down.colIndex, up.colIndex, lowestColIndex, highestColIndex)
 
-    if (this.facet.layoutResult.getCellMeta(this.selectedCellsRange.rowIndex[1], this.selectedCellsRange.colIndex[1]).fieldValue === "$$overview$$") {
+    // if (this.facet.layoutResult.getCellMeta(this.selectedCellsRange.rowIndex[1], this.selectedCellsRange.colIndex[1]).fieldValue === "$$overview$$") {
+    if (
+      (this.mouseDownEventInfo.viewMeta.fieldValue === "$$overview$$") || 
+      (this.mouseMoveEventInfo.viewMeta.fieldValue === "$$overview$$")
+    ) {
       const lowestSequenceRowIndex = 0
       const highestSequenceRowIndex = this.facet.getCellRange().end - (this.options.frozenRowCount ?? 0)
       this._setRange(this.selectedCellsRange.sequenceRowIndex, down.sequenceRowIndex, up.sequenceRowIndex, lowestSequenceRowIndex, highestSequenceRowIndex)
@@ -491,7 +471,7 @@ export class AVTableSheet extends TableSheet {
 
     if (this.facet.layoutResult.colLeafNodes[this.selectedCellsRange.colIndex[1]].field === "__sequenceIndex__") {
       const lowestSequencePosition = 0
-      const highestSequencePosition = this.avStore.alignment ? this.avStore.alignment.length - 1 : 0
+      const highestSequencePosition = this.options.avExtraOptions.alignment ? this.options.avExtraOptions.alignment.length - 1 : 0
       this._setRange(this.selectedCellsRange.sequencePosition, down.sequencePosition, up.sequencePosition, lowestSequencePosition, highestSequencePosition)
     } else {
       this.selectedCellsRange.sequencePosition[0] = -1
@@ -502,7 +482,7 @@ export class AVTableSheet extends TableSheet {
   protected handleSelected(cells: S2CellType[]) {
     this.isPreparingSelection = false
 
-    if ((cells.length === 0) || !this.mousedownEventInfo || !this.mousemoveEventInfo) {
+    if ((cells.length === 0) || !this.mouseDownEventInfo || !this.mouseMoveEventInfo) {
       this.isAnyCellSelected = false
       this.resetSelectedCellsRange()
     } else {
@@ -518,9 +498,9 @@ export class AVTableSheet extends TableSheet {
     let y = 0, isVisible = true
 
     if (this.dataSet.getCellData({query: {rowIndex, field: "__sequenceIndex__"}}) as unknown as string === "$$overview$$") {
-      y = Math.round(this.facet.viewCellHeights.getCellOffsetY(rowIndex)) + sequenceRowIndex * this.avStore.dimensions.rowHeight
+      y = Math.round(this.facet.viewCellHeights.getCellOffsetY(rowIndex)) + sequenceRowIndex * this.options.avExtraOptions.dimensions.rowHeight
       if (border === "bottom") {
-        y += this.avStore.dimensions.rowHeight
+        y += this.options.avExtraOptions.dimensions.rowHeight
       }
     } else {
       y = Math.round(this.facet.viewCellHeights.getCellOffsetY((border === "top") ? rowIndex : rowIndex + 1))
@@ -547,9 +527,9 @@ export class AVTableSheet extends TableSheet {
     const colLeafNodes = this.facet.layoutResult.colLeafNodes
 
     if (colLeafNodes[colIndex].field === "__sequenceIndex__") {
-      x = Math.round(this.facet.viewCellWidths[colIndex]) + sequencePosition * this.avStore.dimensions.residueWidth
+      x = Math.round(this.facet.viewCellWidths[colIndex]) + sequencePosition * this.options.avExtraOptions.dimensions.residueWidth
       if (border === "right") {
-        x += this.avStore.dimensions.residueWidth
+        x += this.options.avExtraOptions.dimensions.residueWidth
       }
     } else {
       x = Math.round(this.facet.viewCellWidths[(border === "left") ? colIndex : colIndex + 1])
@@ -584,14 +564,14 @@ export class AVTableSheet extends TableSheet {
     }
 
     const colLeafNodes = this.facet.layoutResult.colLeafNodes
-    const yOffset = this.facet.cornerBBox.height
+    const colHeaderHeight = this.facet.cornerBBox.height
 
     const frozenTrailingColCount = this.options.frozenTrailingColCount ?? 0
     const bounds: TClippingBounds = {
       minX: this.facet.viewCellWidths[this.options.frozenColCount ?? 0],
       maxX: frozenTrailingColCount ? colLeafNodes[colLeafNodes.length - frozenTrailingColCount].x : 0,
       minY: this.facet.viewCellHeights.getCellOffsetY(this.options.frozenRowCount!),
-      maxY: this.facet.getCanvasHW().height - this.avStore.scrollbarSize - yOffset
+      maxY: this.facet.getCanvasHW().height - this.options.avExtraOptions.scrollbarSize - colHeaderHeight
     }
 
     let [x1, isLeftBorderVisible] = this._cellBorderX(
@@ -614,7 +594,7 @@ export class AVTableSheet extends TableSheet {
       "top",
       bounds
     )
-    y1 += yOffset
+    y1 += colHeaderHeight
 
     let [y2, isBottomBorderVisible] = this._cellBorderY(
       this.selectedCellsRange.rowIndex[1], 
@@ -622,8 +602,8 @@ export class AVTableSheet extends TableSheet {
       "bottom",
       bounds
     )
-    y2 += yOffset
-    
+    y2 += colHeaderHeight
+
     const theme = this.isPreparingSelection 
       ? this.theme.dataCell?.cell?.interactionState?.prepareSelect 
       : this.theme.dataCell?.cell?.interactionState?.selected
@@ -631,7 +611,7 @@ export class AVTableSheet extends TableSheet {
 
     const maskAttrs = {
       x: x1,
-      y: y1,// + yOffset,
+      y: y1,
       width: x2 - x1,
       height: y2 - y1,
       fill: theme?.backgroundColor,
@@ -792,13 +772,13 @@ export class AVTableSheet extends TableSheet {
 
   protected updateSequenceCells(): void {
     // console.log("new dynamicRenderCell")
-    const alignment = this.avStore.alignment
+    const alignment = this.options.avExtraOptions.alignment
     if (!alignment) {
       return
     }
 
-    const isOverviewMode = this.avStore.isOverviewMode
-    const dimensions = this.avStore.dimensions
+    const isOverviewMode = this.options.avExtraOptions.isOverviewMode
+    const dimensions = this.options.avExtraOptions.dimensions
     if (!dimensions) {
       return
     }
@@ -877,12 +857,12 @@ export class AVTableSheet extends TableSheet {
 
   renderMinimap() {
     // console.log("render minimap")
-    const minimapImage = this.avStore.minimapImage
+    const minimapImage = this.options.avExtraOptions.minimapImage
     if (!minimapImage) {
       return
     }
 
-    const dimensions = this.avStore.dimensions
+    const dimensions = this.options.avExtraOptions.dimensions
     if (!dimensions) {
       return
     }
@@ -901,7 +881,7 @@ export class AVTableSheet extends TableSheet {
       return ShapeBaseSupportingOffscreenCanvas
     }
 
-    const scrollbarSize = this.avStore.scrollbarSize
+    const scrollbarSize = this.options.avExtraOptions.scrollbarSize
     const minimapColNode = this.facet.layoutResult.colLeafNodes.find((node) => node.field === "$$minimap$$") as S2Node
     const minimapBackgroundWidth = minimapColNode.width - scrollbarSize
     const minimapBackgroundHeight = panelGroupHeight
@@ -987,12 +967,12 @@ export class AVTableSheet extends TableSheet {
   }
 
   renderSequenceGroupDividers() {
-    const isOverviewMode = this.avStore.isOverviewMode
+    const isOverviewMode = this.options.avExtraOptions.isOverviewMode
     if (isOverviewMode) {
       return
     }
 
-    const alignment = this.avStore.alignment
+    const alignment = this.options.avExtraOptions.alignment
     if (alignment?.groupBy === undefined) {
       return
     }
@@ -1009,9 +989,9 @@ export class AVTableSheet extends TableSheet {
     }
 
     const seriesColNode = this.facet.layoutResult.colLeafNodes.find((node) => node.field === SERIES_NUMBER_FIELD) as S2Node
-    const sortedDisplayedIndices = this.avStore.sortedDisplayedIndices
-    const firstSequenceRowIndex = this.avStore.firstSequenceRowIndex
-    const collapsedGroups = this.avStore.collapsedGroups
+    const sortedDisplayedIndices = this.options.avExtraOptions.sortedDisplayedIndices
+    const firstSequenceRowIndex = this.options.avExtraOptions.firstSequenceRowIndex
+    const collapsedGroups = this.options.avExtraOptions.collapsedGroups
     let { minX: panelScrollGroupMinX, maxX: panelScrollGroupMaxX } = this.panelScrollGroup.getBBox()
     let { minX: frozenColGroupMinX, maxX: frozenColGroupMaxX } = this.frozenColGroup.getBBox()
     let [ colMin, colMax, rowMin = 0, rowMax = 0 ] = this.facet.preCellIndexes.center
@@ -1092,7 +1072,7 @@ export class AVTableSheet extends TableSheet {
 function getHeaderActionIcons(
   columns: string[],
   sortBy: TAlignmentSortParams[],
-  groupBy: string | number | undefined,
+  groupBy: string | number | false | undefined,
   onColHeaderActionIconClick: (props: HeaderIconClickParams) => void,
 ): HeaderActionIcon[] {
   const ascendingColumns: string[] = []
@@ -1284,18 +1264,11 @@ const useDataCell = (
   } else {
     renderer = RENDERER_TYPES.TEXT
     const spreadsheet = viewMeta.spreadsheet as AVTableSheet
-    const alignment = spreadsheet.avStore.alignment
+    const alignment = spreadsheet.options.avExtraOptions.alignment
     if (alignment) {
-      try {
-        const { number, string } = alignment.annotationFields[viewMeta.valueField]
-        if (number > string) {
-          // console.log(viewMeta.valueField, alignment.annotationFields[viewMeta.valueField])
-          renderer = RENDERER_TYPES.NUMBER
-        }
-      } catch (e) {
-        // console.log("useDataCell", viewMeta.spreadsheet.avStore.alignment?.name, viewMeta.valueField)
-        console.log("useDataCell", viewMeta.spreadsheet.avStore.alignment?.name, viewMeta.valueField, viewMeta.spreadsheet.dataCfg.fields.columns)
-        throw(e)
+      const { number, string } = alignment.annotationFields[viewMeta.valueField]
+      if (number > string) {
+        renderer = RENDERER_TYPES.NUMBER
       }
     }
   }
@@ -1306,6 +1279,7 @@ const useDataCell = (
 ])
 
 export function useS2Options(
+  avExtraOptions: TAVExtraOptions,
   alignment: TAlignment | undefined,
   columns: string[],
   columnWidthsRef: MutableRefObject<TColumnWidths>,
@@ -1318,10 +1292,8 @@ export function useS2Options(
   scrollbarSize: number,
   showMinimap: boolean, 
   rowHeightsByField: Record<string, number>, 
-  highlightCurrentSequence: boolean, 
   onColHeaderActionIconClick: (props: HeaderIconClickParams) => void,
-): SheetComponentOptions {
-  console.log("useS2Options", alignment?.name, columns)
+): TAVTableSheetOptions {
   const headerActionIcons = useMemo(() => (
     getHeaderActionIcons(columns, sortBy, alignment?.groupBy, onColHeaderActionIconClick)
   ), [columns,sortBy, alignment?.groupBy, onColHeaderActionIconClick])
@@ -1357,6 +1329,7 @@ export function useS2Options(
     }
 
     return {
+      avExtraOptions,
       dataSet: (spreadsheet) => new AVDataSet(spreadsheet as AVTableSheet),
       showSeriesNumber: !isOverviewMode,
       frozenColCount: isOverviewMode ? 0 : 1 + pinnedColumnsCount,
@@ -1424,7 +1397,7 @@ export function useS2Options(
         resize: {
           rowCellVertical: false,
           cornerCellHorizontal: false,
-          colCellHorizontal: true,
+          colCellHorizontal: false,
           colCellVertical: false, // true if we want the header to be vertically resizable
           // visible: (cell: S2CellType) => {
           //   // Use fixed-width sequence column, because when the column width is too small,
@@ -1437,7 +1410,7 @@ export function useS2Options(
         },
         hoverHighlight: {
           rowHeader: false,
-          currentRow: highlightCurrentSequence,
+          currentRow: true,
           colHeader: false,
           currentCol: false,
         },
@@ -1448,8 +1421,9 @@ export function useS2Options(
       layoutCoordinate,
       colCell,
       dataCell,
-    } as SheetComponentOptions
+    }
   }, [
+    avExtraOptions,
     pinnedColumnsCount, 
     isOverviewMode, 
     devicePixelRatio,
@@ -1457,7 +1431,6 @@ export function useS2Options(
     alignment?.depth,
     alignment?.groupBy,
     rowHeightsByField, 
-    highlightCurrentSequence, 
     headerActionIcons,
     layoutCoordinate,
     dataCell,
@@ -1469,7 +1442,6 @@ export function useS2ThemeCfg(
   fontFamily: string,
   dimensions: TDimensions,
   scrollbarSize: number,
-  highlightCurrentSequence: boolean,
   colorTheme: TAVColorTheme,
 ): ThemeCfg {
   return useMemo(() => {
@@ -1551,9 +1523,14 @@ export function useS2ThemeCfg(
             interactionState: {
               hover: {
                 backgroundColor: "transparent",
-                // borderWidth: 4,
-                // backgroundColor: colorTheme.backgroundOnHover, // colorTheme.headerText,
-                // backgroundOpacity: 1,
+              },
+              prepareSelect: {
+                backgroundColor: "transparent",
+                borderWidth: 0,
+              },
+              selected: {
+                backgroundColor: "transparent",
+                borderWidth: 0,
               },
             }
           }
@@ -1565,13 +1542,12 @@ export function useS2ThemeCfg(
           icon: commonIconTheme,
           cell: {
             ...commonCellTheme,
-            // interactionState: {
-            //   hover: {
-            //     borderWidth: 4,
-            //     backgroundColor: colorTheme.backgroundOnHover, // colorTheme.headerText,
-            //     backgroundOpacity: 1,
-            //   },
-            // },
+            interactionState: {
+              hover: {
+                backgroundColor: "transparent",
+                borderWidth: 0,
+              },
+            },
           },
         },
         cornerCell: {
@@ -1644,7 +1620,6 @@ export function useS2ThemeCfg(
     fontFamily, 
     dimensions, 
     scrollbarSize, 
-    // highlightCurrentSequence,
     colorTheme,
   ])
 }
@@ -1656,7 +1631,6 @@ export function useS2DataCfg(
   columns: string[], 
   isOverviewMode: boolean,
 ) {
-  console.log("useS2DataCfg", alignment?.name, columns)
   return useMemo(() => {
     const data: DataType[] = []
     const groupSizeAtRowIndex: number[] = []

@@ -14,7 +14,7 @@ export class SequenceIdDataCell extends TextDataCell {
     const textStyle = super.getTextStyle()
 
     const viewMeta = this.getMeta()
-    const alignment = this.spreadsheet.avStore.alignment
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment
     
     const sequenceIndex = this.spreadsheet.dataSet.getCellData({
       query: {
@@ -37,7 +37,7 @@ export class SequenceIdDataCell extends TextDataCell {
 
   // add underline to links
   protected drawTextShape(): void {
-    if (this.spreadsheet.avStore.isOverviewMode) {
+    if (this.spreadsheet.options.avExtraOptions.isOverviewMode) {
       return
     }
 
@@ -58,7 +58,7 @@ export class SequenceIdDataCell extends TextDataCell {
 
   getLinks() {
     const viewMeta = this.getMeta()
-    const alignment = this.spreadsheet.avStore.alignment
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment
     if (!alignment) {
       return []
     }

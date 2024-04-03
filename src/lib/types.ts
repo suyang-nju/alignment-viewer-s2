@@ -4,7 +4,9 @@ import type {
   ViewMeta, 
   Node as S2Node,
   S2CellType, 
+  S2Options,
 } from '@antv/s2'
+import type { SheetComponentOptions } from '@antv/s2-react'
 import type { Event as CanvasEvent } from '@antv/g-canvas'
 import type { RadioChangeEvent } from 'antd'
 import type Sprites from './sprites'
@@ -164,6 +166,10 @@ export type TAVExtraOptions = {
   scrollbarSize: number,
 }
 
+export type TAVTableSheetOptions = SheetComponentOptions & {
+  avExtraOptions: TAVExtraOptions
+}
+
 export type TColumnWidths = {
   alignmentUuid: string | undefined,
   fieldWidths: Record<string, number>,
@@ -242,41 +248,46 @@ export type TAVColorTheme = {
 export type TAlignmentViewerToggles = Record<string, {label: string, visible: boolean}>
 
 // export type TAlignmentViewerToggles = Record<keyof typeof defaultToggles, boolean>
-export type TContextualInfo = {
-  key: string,
-  sequenceIndex?: number | string,
-  residueIndex?: number,
-  row?: number,
-  col?: number,
-  sequenceId?: string,
-  content: ReactNode[],
-  anchorX: number,
-  anchorY: number,
-  anchorWidth: number,
-  anchorHeight: number,
-}
 
-export type TNormalizedPosition = {
+export type TAVMouseEventInfo = {
+  event: CanvasEvent, 
+  cell: S2CellType, 
+  viewMeta: ViewMeta | S2Node, 
+  iconName: string | undefined,
+  
   rowIndex: number,
   colIndex: number,
   sequencePosition: number,
   sequenceRowIndex: number, // useful in overview mode
-}
+  visible: {
+    top: number,
+    bottom: number,
+    left: number, 
+    right: number,
+    width: number,
+    height: number,
+  },
+  clip: {
+    top: boolean,
+    bottom: boolean,
+    left: boolean,
+    right: boolean,
+  },
 
-export type TAVMouseEventInfo = {
-  event: CanvasEvent, 
-  target: S2CellType<ViewMeta>, 
-  viewMeta: ViewMeta | S2Node, 
-  iconName: string | undefined,
-  normalizedPosition: TNormalizedPosition,
-  contextualInfo?: TContextualInfo,
+  key: string,
+  sequenceIndex: number | string | undefined,
+  sequenceId: string | undefined,
+  extraInfo: ReactNode[],
 }
 
 export type TSelectedCellsRange = {
-  [K in keyof TNormalizedPosition]: TNormalizedPosition[K][]
+  rowIndex: number[],
+  colIndex: number[],
+  sequencePosition: number[],
+  sequenceRowIndex: number[], // useful in overview mode
 }
 
-export type TSetContextualInfo = (info?: TAVMouseEventInfo) => void
+export type TSetMouseEventInfo = (info?: TAVMouseEventInfo) => void
 
 export type TDimensions = {
   zoom: number,
@@ -328,7 +339,6 @@ export type TAlignmentViewerProps = {
   positionsToStyle?: TAlignmentPositionsToStyle, 
   hideUnstyledPositions?: boolean,
   scrollbarSize?: number,
-  highlightCurrentSequence?: boolean,
   colorTheme: TAVColorTheme,
   darkMode?: boolean,
   adaptiveContainerRef?: MutableRefObject<HTMLElement | null>,
@@ -337,7 +347,7 @@ export type TAlignmentViewerProps = {
   onChangeSortBy?: (sortBy: TAlignmentSortParams[]) => void,
   onChangePinnedColumns?: (pinnedColumns: string[]) => void,
   onChangeOtherVisibleColumns?: (otherVisibleColumns: string[]) => void,
-  onMouseHover?: TSetContextualInfo,
+  onMouseHover?: TSetMouseEventInfo,
   onContextMenu?: (info: TAVMouseEventInfo) => void,
   onBusy?: (isBusy: boolean) => void,
 }

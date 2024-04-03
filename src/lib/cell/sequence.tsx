@@ -1,6 +1,5 @@
 import type { Event as GraphEvent } from '@antv/g-canvas'
-import type { S2CellType, ViewMeta } from '@antv/s2'
-import type { TContextualInfo } from '../types'
+import type { TAVMouseEventInfo } from '../types'
 
 import { isNumber } from 'lodash'
 
@@ -11,13 +10,13 @@ import { TableDataCellWithEventsAndSequence } from './base'
 export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {
     const spreadsheet = this.spreadsheet
-    const avStore = spreadsheet.avStore
-    const alignment = avStore.alignment
+    const avExtraOptions = spreadsheet.options.avExtraOptions
+    const alignment = avExtraOptions.alignment
     if (!alignment) {
       return
     }
 
-    const dimensions = avStore.dimensions
+    const dimensions = avExtraOptions.dimensions
     const { residueWidth, residueHeight } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
     const sequenceIndex = this.getMeta().fieldValue
@@ -36,7 +35,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
       //   dWidth: residueWidth * (sequencePositionEnd - sequencePositionStart + 1),
       //   dHeight: residueHeight * (visibleSequenceRowIndexEnd - visibleSequenceRowIndexStart + 1),
       // })
-      // img[0] = avStore.get("minimapImage") as OffscreenCanvas
+      // img[0] = avExtraOptions.get("minimapImage") as OffscreenCanvas
 
       const sWidth = sequencePositionEnd - sequencePositionStart + 1
       const sHeight = visibleSequenceRowIndexEnd - visibleSequenceRowIndexStart + 1
@@ -48,7 +47,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
         img[0] = new OffscreenCanvas(sWidth, sHeight)
       }
 
-      const overviewImageData = avStore.overviewImageData
+      const overviewImageData = avExtraOptions.overviewImageData
       if (!overviewImageData) {
         return
       }
@@ -66,7 +65,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
         dHeight: residueHeight * (visibleSequenceRowIndexEnd - visibleSequenceRowIndexStart + 1),
       })
     } else {
-      const sprites = avStore.sprites
+      const sprites = avExtraOptions.sprites
       const dpr = window.devicePixelRatio
       this.spriteShape.attr({
         // cursor: "text",
@@ -90,7 +89,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
         sequence = alignment.sequences[sequenceIndex as number]
       }
 
-      let positionsToStyle = avStore.positionsToStyle
+      let positionsToStyle = avExtraOptions.positionsToStyle
       if (
         ((sequenceIndex === "$$reference$$") && ((positionsToStyle === "sameAsReference") || (positionsToStyle === "differentFromReference"))) || 
         ((sequenceIndex === "$$consensus$$") && ((positionsToStyle === "sameAsConsensus") || (positionsToStyle === "differentFromConsensus")))
@@ -105,7 +104,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
         alignment.alphabetToPssmIndex,
       )
 
-      const hideUnstyledPositions = avStore.hideUnstyledPositions
+      const hideUnstyledPositions = avExtraOptions.hideUnstyledPositions
   
       for (let i = sequencePositionStart, j = 0; i <= sequencePositionEnd; ++i, ++j) {
         img[j] = shouldBeStyled(sequence[i], i) ? sprites.get(sequence[i]) : hideUnstyledPositions ? undefined : sprites.getMuted(sequence[i])
@@ -212,57 +211,52 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
   }
   */
 
-  getContextualInfo(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta, iconName?: string): TContextualInfo | undefined {
-    const alignment = this.spreadsheet.avStore.alignment
-    if (!alignment) {
-      return
+  getMouseEventInfo(event: GraphEvent): TAVMouseEventInfo {
+    const avmei = super.getMouseEventInfo(event)
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment
+    if (alignment) {
+      const sequencePosition = avmei.sequencePosition
+      let sequenceIndex = avmei.sequenceIndex
+      if (sequenceIndex === "$$reference$$") {
+        sequenceIndex = alignment.referenceSequenceIndex
+      }
+  
+      let sequence: string | undefined = undefined
+      if (sequenceIndex === "$$consensus$$") {
+        sequence = alignment.positionalAnnotations.consensus
+      } else if (isNumber(sequenceIndex)) {
+        sequence = alignment.sequences[sequenceIndex]
+      }
+  
+      let residue: string | undefined = undefined
+      if ((sequence !== undefined) && (sequencePosition !== undefined)) {
+        residue = sequence[sequencePosition]
+      }
+      
+      if ((residue === undefined) || (sequence === undefined) || (sequencePosition === undefined)) {
+        return avmei
+      }
+  
+      avmei.extraInfo = []
+      if (isGapChar(residue)) {
+        return avmei
+      }
+  
+      let residueNumber: number | string
+      if (sequenceIndex === "$$consensus$$") {
+        residueNumber = sequencePosition + 1
+      } else {
+        residueNumber = alignment.annotations.__begin__[sequenceIndex as number] - 1
+        for (let i = 0; i <= sequencePosition; ++i) {
+          if (!isGapChar(sequence[i])) {
+            ++residueNumber
+          }
+        }  
+      }
+  
+      avmei.extraInfo.push(<div key="residue" className="residue">{`${residue} ${residueNumber}`}</div>)
     }
 
-    const info = super.getContextualInfo(event, target, viewMeta, iconName)
-    if (!info) {
-      return
-    }
-
-    const residueIndex = info.residueIndex
-    let sequenceIndex = info.sequenceIndex
-    if (sequenceIndex === "$$reference$$") {
-      sequenceIndex = alignment.referenceSequenceIndex
-    }
-
-    let sequence: string | undefined = undefined
-    if (sequenceIndex === "$$consensus$$") {
-      sequence = alignment.positionalAnnotations.consensus
-    } else if (isNumber(sequenceIndex)) {
-      sequence = alignment.sequences[sequenceIndex]
-    }
-
-    let residue: string | undefined = undefined
-    if ((sequence !== undefined) && (residueIndex !== undefined)) {
-      residue = sequence[residueIndex]
-    }
-    
-    if ((residue === undefined) || (sequence === undefined) || (residueIndex === undefined)) {
-      return info
-    }
-
-    info.content = []
-    if (isGapChar(residue)) {
-      return info
-    }
-
-    let residueNumber: number | string
-    if (sequenceIndex === "$$consensus$$") {
-      residueNumber = residueIndex + 1
-    } else {
-      residueNumber = alignment.annotations.__begin__[sequenceIndex as number] - 1
-      for (let i = 0; i <= residueIndex; ++i) {
-        if (!isGapChar(sequence[i])) {
-          ++residueNumber
-        }
-      }  
-    }
-
-    info.content.push(<div key="residue" className="residue">{`${residue} ${residueNumber}`}</div>)
-    return info
+    return avmei
   }
 }

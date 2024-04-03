@@ -6,7 +6,7 @@ export class SequenceSeriesColCell extends TableColCellWithEvents {
   protected drawInteractiveBgShape() {}
   
   protected drawTextShape(): void {
-    if (this.spreadsheet.avStore.isOverviewMode) {
+    if (this.spreadsheet.options.avExtraOptions.isOverviewMode) {
       return
     }
 
@@ -15,8 +15,8 @@ export class SequenceSeriesColCell extends TableColCellWithEvents {
   }
 
   public drawGroupIconShapes(): void {
-    const avStore = this.spreadsheet.avStore
-    const alignment = avStore.alignment
+    const avExtraOptions = this.spreadsheet.options.avExtraOptions
+    const alignment = avExtraOptions.alignment
     if (!alignment) {
       return
     }
@@ -25,7 +25,7 @@ export class SequenceSeriesColCell extends TableColCellWithEvents {
       return
     }
 
-    const collapsedGroups = avStore.collapsedGroups
+    const collapsedGroups = avExtraOptions.collapsedGroups
     let iconName = "AntdPlus"
     for (let groupIndex = 0; groupIndex < alignment.groups.length; ++groupIndex) {
       if ((alignment.groups[groupIndex].members.length > 1) && !collapsedGroups.includes(groupIndex)) {
@@ -35,7 +35,7 @@ export class SequenceSeriesColCell extends TableColCellWithEvents {
     }
 
     const iconPosition = this.getIconPosition()
-    const {size: iconSize = avStore.dimensions.iconSize} = this.getIconStyle() ?? {}
+    const {size: iconSize = avExtraOptions.dimensions.iconSize} = this.getIconStyle() ?? {}
     const fill = this.spreadsheet.theme.rowCell?.text?.fill
     this.conditionIconShape = renderIcon(this, {
       name: iconName,

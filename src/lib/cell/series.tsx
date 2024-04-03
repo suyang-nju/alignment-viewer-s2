@@ -23,7 +23,7 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
 
   protected getFormattedFieldValue(): FormatResult {
     const rowIndex = this.getMeta().rowIndex
-    const firstSequenceRowIndex = this.spreadsheet.avStore.firstSequenceRowIndex
+    const firstSequenceRowIndex = this.spreadsheet.options.avExtraOptions.firstSequenceRowIndex
 
     const row = rowIndex - firstSequenceRowIndex + 1 // 1-based
     return {
@@ -33,7 +33,7 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
   }
 
   protected drawTextShape(): void {
-    if (this.spreadsheet.avStore.isOverviewMode) {
+    if (this.spreadsheet.options.avExtraOptions.isOverviewMode) {
       return
     }
 
@@ -42,16 +42,16 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
   }
 
   public drawGroupIconShapes(): void {
-    const avStore = this.spreadsheet.avStore
-    const alignment = avStore.alignment
+    const avExtraOptions = this.spreadsheet.options.avExtraOptions
+    const alignment = avExtraOptions.alignment
 
     if (alignment?.groupBy === undefined) {
       return
     }
 
     const viewMeta = this.getMeta()
-    const firstSequenceRowIndex = avStore.firstSequenceRowIndex
-    const sortedDisplayedIndices = avStore.sortedDisplayedIndices
+    const firstSequenceRowIndex = avExtraOptions.firstSequenceRowIndex
+    const sortedDisplayedIndices = avExtraOptions.sortedDisplayedIndices
     const i = viewMeta.rowIndex - firstSequenceRowIndex
     if (i < 0) {
       return
@@ -69,7 +69,7 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
     const prevRowGroupIndex = (prevRowSequenceIndex === undefined) ? undefined : alignment.annotations.__groupIndex__[prevRowSequenceIndex]
     const nextRowGroupIndex = (nextRowSequenceIndex === undefined) ? undefined : alignment.annotations.__groupIndex__[nextRowSequenceIndex]
 
-    const collapsedGroups = avStore.collapsedGroups
+    const collapsedGroups = avExtraOptions.collapsedGroups
     let iconName: string
     if (groupIndex !== prevRowGroupIndex) {
       iconName = collapsedGroups.includes(groupIndex) ? "AntdPlus" : "AntdMinus"
@@ -80,7 +80,7 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
     }                
 
     const iconPosition = this.getIconPosition()
-    const {size: iconSize = avStore.dimensions.iconSize} = this.getIconStyle() ?? {}
+    const {size: iconSize = avExtraOptions.dimensions.iconSize} = this.getIconStyle() ?? {}
     const fill = this.spreadsheet.theme.rowCell?.text?.fill
     const { y: cellY, height: cellHeight } = this.getCellArea()
     if (iconName === "L") {

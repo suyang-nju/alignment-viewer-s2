@@ -29,7 +29,6 @@ import {
   HIDDEN_ANNOTATION_FIELDS,
   GROUP_ANNOTATION_FIELDS,
 } from '../lib/constants'
-import { getAlignmentAnnotationFields } from './alignment'
 
 
 type TContextMenuProps = {
@@ -43,7 +42,7 @@ type TContextMenuProps = {
   otherVisibleColumns: string[] | undefined, 
   sortBy: TAlignmentSortParams[] | undefined, 
   groupBy: string | number | false | undefined,
-  contextMenuTarget?: TAVMouseEventInfo, 
+  contextMenuEventInfo?: TAVMouseEventInfo, 
   paddingXS: number,
   setOtherVisibleColumns: React.Dispatch<React.SetStateAction<string[] | undefined>>,
   setPinnedColumns: React.Dispatch<React.SetStateAction<string[] | undefined>>,
@@ -68,7 +67,7 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
     pinnedColumns,
     sortBy, 
     groupBy, 
-    contextMenuTarget, 
+    contextMenuEventInfo, 
     paddingXS,
   } = props
 
@@ -79,22 +78,22 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
     (sortBy !== undefined) &&
     (groupBy !== undefined)
   ) {
-    if (contextMenuTarget?.target?.cellType === CellTypes.COL_CELL) {
+    if (contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) {
       const { Text } = Typography
-      const currentField = contextMenuTarget?.viewMeta.field
+      const currentField = contextMenuEventInfo?.viewMeta.field
       const currentFieldName = currentField ? annotationFields[currentField]?.name : undefined
 
       let isSortedByCurrentField: "asc" | "desc" | "no" = "no"
       if (sortBy.length > 0) {
         for (const by of sortBy) {
-          if (contextMenuTarget?.viewMeta.field === by.field) {
+          if (contextMenuEventInfo?.viewMeta.field === by.field) {
             isSortedByCurrentField = by.order
           }
         }
       }
 
       const sortSubmenuItems: MenuProps['items'] = []
-      if (contextMenuTarget.viewMeta.field && !HIDDEN_ANNOTATION_FIELDS.includes(contextMenuTarget.viewMeta.field)) {
+      if (contextMenuEventInfo.viewMeta.field && !HIDDEN_ANNOTATION_FIELDS.includes(contextMenuEventInfo.viewMeta.field)) {
         sortSubmenuItems.push({
           key: "sort-asc",
           label: <>Ascending <Text italic>{currentFieldName}</Text></>,
@@ -164,7 +163,7 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
       })    
     }
 
-    const currentResidueIndex = contextMenuTarget?.contextualInfo?.residueIndex
+    const currentResidueIndex = contextMenuEventInfo?.sequencePosition
     if (currentResidueIndex !== undefined) {
       contextMenuItems.push({
         key: "group-ungroup-by-sequence-position",
@@ -173,7 +172,7 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
       })
     }
 
-    const currentSequenceIndex = contextMenuTarget?.contextualInfo?.sequenceIndex
+    const currentSequenceIndex = contextMenuEventInfo?.sequenceIndex
     if (Number.isInteger(currentSequenceIndex)) {
       if (referenceSequenceIndex !== currentSequenceIndex) {
         contextMenuItems.push({
@@ -475,7 +474,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
     otherVisibleColumns, 
     sortBy, 
     groupBy, 
-    contextMenuTarget, 
+    contextMenuEventInfo: contextMenuEventInfo, 
     paddingXS,
     setOtherVisibleColumns,
     setPinnedColumns,
@@ -495,7 +494,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
       (sortBy !== undefined) &&
       (groupBy !== undefined)
     ) {
-      const currentField = contextMenuTarget?.viewMeta?.field
+      const currentField = contextMenuEventInfo?.viewMeta?.field
       if (key === "do-not-sort") {
         if (sortBy.length > 0) {
           setSortBy([])
@@ -558,7 +557,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
       } else if (key === "do-not-group") {
         setGroupBy(false)
       } else if (key === "group-ungroup-by-sequence-position") {
-        const residueIndex = contextMenuTarget?.contextualInfo?.residueIndex ?? false
+        const residueIndex = contextMenuEventInfo?.sequencePosition ?? false
         setGroupBy((residueIndex === groupBy) ? false : residueIndex)
       } else if (key.startsWith("group-ungroup-by-")) {
         const field = key.substring("group-ungroup-by-".length)
@@ -571,7 +570,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
           setGroupBy(field)
         }
       } else if (key === "set-reference-sequence") {
-        const referenceSequenceIndex = contextMenuTarget?.contextualInfo?.sequenceIndex
+        const referenceSequenceIndex = contextMenuEventInfo?.sequenceIndex
         if (Number.isInteger(referenceSequenceIndex)) {
           setReferenceSequenceIndex(referenceSequenceIndex as number)
         }

@@ -1,6 +1,5 @@
 import type { Event as GraphEvent } from '@antv/g-canvas'
-import type { S2CellType, ViewMeta } from '@antv/s2'
-import type { TContextualInfo, TSequenceLogos, TPssm } from '../types'
+import type { TAVMouseEventInfo, TSequenceLogos, TPssm } from '../types'
 
 import { isNumber } from 'lodash'
 
@@ -9,9 +8,9 @@ import { TableDataCellWithEventsAndSequence } from './base'
 
 export class LogoDataCell extends TableDataCellWithEventsAndSequence {
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {
-    const avStore = this.spreadsheet.avStore
+    const avExtraOptions = this.spreadsheet.options.avExtraOptions
     const visibleSequencePositionStart = this.spreadsheet.visibleSequencePositionStart
-    const alignment = avStore.alignment
+    const alignment = avExtraOptions.alignment
     if (!alignment) {
       return
     }
@@ -21,18 +20,18 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
     let groupIndex: number | undefined
     if (alignment.groupBy && isNumber(sequenceIndex)) {
       groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
-      sequenceLogos = avStore.sequenceLogosGroups
+      sequenceLogos = avExtraOptions.sequenceLogosGroups
 
     } else {
       groupIndex = undefined
-      sequenceLogos = avStore.sequenceLogos
+      sequenceLogos = avExtraOptions.sequenceLogos
     }
 
     if (!sequenceLogos) {
       return
     }
 
-    const dimensions = avStore.dimensions
+    const dimensions = avExtraOptions.dimensions
     const { residueWidth } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
     const dpr = window.devicePixelRatio
@@ -61,59 +60,51 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
     }
   }
 
-  getContextualInfo(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta, iconName?: string): TContextualInfo | undefined {
-    const alignment = this.spreadsheet.avStore.alignment
-    if (!alignment) {
-      return
-    }
-
-    const info = super.getContextualInfo(event, target, viewMeta, iconName)
-    if (!info) {
-      return
-    }
-
-    const residueIndex = info.residueIndex as number
-    const sequenceIndex = info.sequenceIndex
-    const key = `${sequenceIndex} ${residueIndex}`
-    const className = `${sequenceIndex}`
-
-    let pssm: TPssm
-    if (isNumber(sequenceIndex)) {
-      const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
-      pssm = alignment.groups[groupIndex].pssm//[residueIndex]
-      // sortedIndices = alignment.groups[groupIndex].pssmSortedIndices[residueIndex]
-    } else {
-      pssm = alignment.positionalAnnotations.pssm//[residueIndex]
-      // sortedIndices = alignment.pssmSortedIndices[residueIndex]
-    }
-
-    if (pssm) {
-      info.content = []
-      let lessThan1pct = ""
-      const indexingOffset = residueIndex * pssm.alphabet.length
-      for (let j = pssm.alphabet.length - 1; j >= 0; --j) {
-        const i = pssm.sortedIndices[indexingOffset + j]
-        const pct = pssm.values[indexingOffset + i]
-        if ((i === pssm.gapIndex) || (pct < 0)) { // gap or not exist
-          continue
-        } else if (pct > 0) {
-          info.content.push(
-            <div key={`${key} ${i}`} className={className}>{`${pssm.alphabet[i]} ${pct}%`}</div>
-          )
-        } else {
-          lessThan1pct += pssm.alphabet[i]
+  getMouseEventInfo(event: GraphEvent): TAVMouseEventInfo {
+    const avmei = super.getMouseEventInfo(event)
+    const alignment = this.spreadsheet.options.avExtraOptions.alignment
+    if (alignment) {
+      const sequencePosition = avmei.sequencePosition
+      const sequenceIndex = avmei.sequenceIndex
+      const key = `${sequenceIndex} ${sequencePosition}`
+      const className = `${sequenceIndex}`
+  
+      let pssm: TPssm
+      if (isNumber(sequenceIndex)) {
+        const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
+        pssm = alignment.groups[groupIndex].pssm
+      } else {
+        pssm = alignment.positionalAnnotations.pssm
+      }
+  
+      if (pssm) {
+        avmei.extraInfo = []
+        let lessThan1pct = ""
+        const indexingOffset = sequencePosition * pssm.alphabet.length
+        for (let j = pssm.alphabet.length - 1; j >= 0; --j) {
+          const i = pssm.sortedIndices[indexingOffset + j]
+          const pct = pssm.values[indexingOffset + i]
+          if ((i === pssm.gapIndex) || (pct < 0)) { // gap or not exist
+            continue
+          } else if (pct > 0) {
+            avmei.extraInfo.push(
+              <div key={`${key} ${i}`} className={className}>{`${pssm.alphabet[i]} ${pct}%`}</div>
+            )
+          } else {
+            lessThan1pct += pssm.alphabet[i]
+          }
         }
+  
+        if (lessThan1pct !== "") {
+          avmei.extraInfo.push(
+            <div key={`${key} lessThan1pct`} className={className}>{`${lessThan1pct} < 1%`}</div>
+          )
+        }
+      } else {
+        avmei.extraInfo = [<div key={key} className={className}>{SPECIAL_ROWS[`${sequenceIndex}`].label}</div>]
       }
-
-      if (lessThan1pct !== "") {
-        info.content.push(
-          <div key={`${key} lessThan1pct`} className={className}>{`${lessThan1pct} < 1%`}</div>
-        )
-      }
-    } else {
-      info.content = [<div key={key} className={className}>{SPECIAL_ROWS[`${sequenceIndex}`].label}</div>]
     }
 
-    return info
+    return avmei
   }
 }

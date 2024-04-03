@@ -21,14 +21,27 @@ import {
   TableColCell, 
   InteractionStateName,
   CellTypes,
+  GuiIcon,
   getEllipsisText,
   getEmptyPlaceholder,
   renderText,
   getTextAndFollowingIconPosition,
 } from '@antv/s2'
-import { Shape } from '@antv/g-canvas'
+import { Shape, Canvas as GCanvas } from '@antv/g-canvas'
 
 import { ShapeBaseSupportingOffscreenCanvas } from '../OffscreenCanvas'
+
+
+function getGuiIcon(target: GraphEvent['target']) {
+  let parent = target
+  while (parent && !(parent instanceof GCanvas)) {
+    if (parent instanceof GuiIcon) {
+      return parent
+    }
+    parent = parent.get?.('parent')
+  }
+  return null
+}
 
 class AVTableColCell extends TableColCell {
   declare protected spreadsheet: AVTableSheet
@@ -71,151 +84,146 @@ function withEvents<TBase extends TAVTableCellConstructor>(Base: TBase) {
     //   }
     // }
   
-    getNormalizedPosition(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta | S2Node): TNormalizedPosition {
-      let rowIndex = -1
-      let colIndex = -1
-      const sequencePosition = -1
-      const sequenceRowIndex = -1
+    getMouseEventInfo(event: GraphEvent): TAVMouseEventInfo {
+      const viewMeta = this.getMeta()
+      const icon = getGuiIcon(event.target)
+      const iconName = icon?.get("name")
 
-      switch (target.cellType) {
+      let rowIndex: number, colIndex: number
+      switch (this.cellType) {
         case CellTypes.DATA_CELL:
           rowIndex = viewMeta.rowIndex
           colIndex = viewMeta.colIndex
           break
         case CellTypes.COL_CELL:
+          rowIndex = -1
           colIndex = viewMeta.colIndex
           break
         case CellTypes.ROW_CELL:
           rowIndex = viewMeta.rowIndex
+          colIndex = -1
           break
+        default:
+          rowIndex = -1
+          colIndex = -1
       }
       
-      return { rowIndex, colIndex, sequencePosition, sequenceRowIndex }
-    }
-  
-    getContextualInfo(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta | S2Node, iconName?: string): TContextualInfo | undefined {
       const spreadsheet = this.spreadsheet as AVTableSheet
-      const avStore = spreadsheet.avStore
-      const firstSequenceRowIndex = avStore.firstSequenceRowIndex
-      const alignment = avStore.alignment
-      if (!alignment) {
-        return 
-      }
-      const sortedDisplayedIndices = avStore.sortedDisplayedIndices
-      const dimensions = avStore.dimensions
-      const { scrollX = 0, scrollY = 0 } = spreadsheet.facet.getScrollOffset()
+      const options = spreadsheet.options
+      const avExtraOptions = options.avExtraOptions
 
-      let sequenceIndex: number | string | undefined
-      let row: number | undefined
-      if ((viewMeta.valueField === "__sequenceIndex__") && (viewMeta.fieldValue === "$$overview$$")) {
-        row = Math.floor((event.y - viewMeta.spreadsheet.facet.columnHeader.getBBox().height + scrollY - viewMeta.y) / dimensions.residueHeight)
-        sequenceIndex = sortedDisplayedIndices[row]
-        ++row // adjust to 1-based
-      } else {
-        if (target.cellType === CellTypes.DATA_CELL) {
-          row = viewMeta.rowIndex - firstSequenceRowIndex + 1 // 1-based
-          if (row <= 0) {
-            row = undefined
-          }
-  
-          sequenceIndex = spreadsheet.dataSet.getCellData({
-            query: {
-              rowIndex: viewMeta.rowIndex
-            }
-          }).__sequenceIndex__  
-        } else {
-          sequenceIndex = undefined
-          row = undefined
-        }
-      }
+      const sequenceRowIndex = (rowIndex < avExtraOptions.firstSequenceRowIndex) ? -1 : (rowIndex - avExtraOptions.firstSequenceRowIndex)
+      const sequencePosition = -1
 
-      let restOfGroup: number | undefined = undefined
-      if (alignment.groupBy && isNumber(sequenceIndex)) {
-        const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
-        const collapsedGroups = avStore.collapsedGroups
-        if (collapsedGroups.includes(groupIndex)) {
-          restOfGroup = alignment.annotations.__groupSize__[sequenceIndex] - 1
-        }
-      }
-
-      let sequenceId: string | undefined = undefined
-      if (sequenceIndex === "$$reference$$") {
-        sequenceId = alignment.annotations.__id__[alignment.referenceSequenceIndex]
-      } else if (sequenceIndex === "$$consensus$$") {
-        sequenceId = "Consensus Sequence"
-      } else if (isNumber(sequenceIndex)) {
-        sequenceId = alignment.annotations.__id__[sequenceIndex]
-        if (restOfGroup) {
-          sequenceId = `Group: ${sequenceId} + ${restOfGroup} sequences`
-        }
-      }
-  
-      const panelScrollGroupClipBBox = spreadsheet.panelScrollGroup.getClip().getBBox()
-      const frozenColGroupWidth = spreadsheet.frozenColGroup.getBBox().width
-      // const scrollX = panelScrollGroupClipBBox.x - frozenColGroupWidth
-      let residueIndex: number | undefined, col: number | undefined
-      let anchorX, anchorWidth
-      if ((viewMeta.valueField === "__sequenceIndex__") || (viewMeta.field === "__sequenceIndex__")) {
-        residueIndex = Math.floor((event.x + scrollX - viewMeta.x) / dimensions.residueWidth)
-        col = residueIndex + 1  
-        anchorX = viewMeta.x + residueIndex * dimensions.residueWidth
-        anchorWidth = dimensions.residueWidth  
-      } else {
-        residueIndex = undefined
-        col = undefined
-        anchorX = viewMeta.x
-        anchorWidth = viewMeta.width
-      }
-  
-      if (viewMeta.x >= frozenColGroupWidth) {
-        anchorX -= scrollX
-        if (anchorX < frozenColGroupWidth) {
-          const hiddenWidth = frozenColGroupWidth - anchorX
-          anchorX += hiddenWidth
-          anchorWidth -= hiddenWidth
-        }
-      }
-      anchorX += event.clientX - event.x
-      anchorX = event.clientX
+      const facet = spreadsheet.facet
+      const colLeafNodes = facet.layoutResult.colLeafNodes
+      const colHeaderHeight = facet.cornerBBox.height
+      const { scrollX = 0, scrollY = 0 } = facet.getScrollOffset()
+      const { width: canvasWidth, height: canvasHeight} = facet.getCanvasHW()
       
-      const frozenRowGroupHeight = spreadsheet.frozenRowGroup.getBBox().height
-      let anchorY = viewMeta.y
-      let anchorHeight = viewMeta.height
-      if (viewMeta.y >= frozenRowGroupHeight) {
-        anchorY = viewMeta.y - panelScrollGroupClipBBox.y + frozenRowGroupHeight
-        if (anchorY < frozenRowGroupHeight) {
-          const hiddenHeight = frozenRowGroupHeight - anchorY
-          anchorY += hiddenHeight
-          anchorHeight -= hiddenHeight
+      const frozenRowCount = options.frozenRowCount ?? 0
+      const frozenColCount = options.frozenColCount ?? 0
+      const frozenTrailingColCount = options.frozenTrailingColCount ?? 0
+      const minX = facet.viewCellWidths[frozenColCount]
+      const maxX = frozenTrailingColCount ? colLeafNodes[colLeafNodes.length - frozenTrailingColCount].x : canvasWidth - options.avExtraOptions.scrollbarSize
+      const minY = facet.viewCellHeights.getCellOffsetY(frozenRowCount)
+      const maxY = canvasHeight - options.avExtraOptions.scrollbarSize - colHeaderHeight
+  
+      const { x: cellX, y: cellY, width: cellWidth, height: cellHeight} = this.getCellArea()
+      let top = cellY, bottom = cellY + cellHeight, left = cellX, right = cellX + cellWidth
+      let topClip = false, bottomClip = false, leftClip = false, rightClip = false
+
+      if ((colIndex >= frozenColCount) && (colIndex < colLeafNodes.length - frozenTrailingColCount)) {
+        left -= scrollX
+        right -= scrollX
+  
+        if (left < minX) {
+          leftClip = true
+          left = minX
+        } 
+        
+        if (right > maxX) {
+          rightClip = true
+          right = maxX
         }
       }
-      anchorY += event.clientY - event.y + dimensions.colHeight
+
+      if (rowIndex >= frozenRowCount) {
+        top -= scrollY
+        bottom -= scrollY
   
-      const content: ReactNode[] = []
-      if (!isNil(viewMeta.fieldValue)) {
-        const fieldName = alignment.annotationFields[viewMeta.valueField]?.name
-        let fieldContent = `${viewMeta.fieldValue}`
-        if (restOfGroup) {
-          fieldContent += ` + ${restOfGroup} others`
+        if (top < minY) {
+          topClip = true
+          top = minY
         }
-        content.push(<div key="other" className="other">{fieldName}: {fieldContent}</div>)
+        
+        if (bottom > maxY) {
+          bottomClip = true
+          bottom = maxY
+        }
       }
   
+      if (this.cellType !== CellTypes.COL_CELL) {
+        top += colHeaderHeight
+        bottom += colHeaderHeight
+      }
+
+      const sequenceIndex: string | number | undefined = (rowIndex < 0) ? undefined : spreadsheet.dataSet.getCellData({ query: { rowIndex }}).__sequenceIndex__
+      
+      const alignment = avExtraOptions.alignment
+      let sequenceId: string | undefined = undefined
+      const extraInfo: ReactNode[] = []
+      if (alignment) {
+        let restOfGroup: number | undefined = undefined
+        if (alignment.groupBy && isNumber(sequenceIndex)) {
+          const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
+          const collapsedGroups = avExtraOptions.collapsedGroups
+          if (collapsedGroups.includes(groupIndex)) {
+            restOfGroup = alignment.annotations.__groupSize__[sequenceIndex] - 1
+          }
+        }
+  
+        if (sequenceIndex === "$$reference$$") {
+          sequenceId = alignment.annotations.__id__[alignment.referenceSequenceIndex]
+        } else if (sequenceIndex === "$$consensus$$") {
+          sequenceId = "Consensus Sequence"
+        } else if (isNumber(sequenceIndex)) {
+          sequenceId = alignment.annotations.__id__[sequenceIndex]
+          if (restOfGroup) {
+            sequenceId = `Group: ${sequenceId} + ${restOfGroup} sequences`
+          }
+        }
+
+        if (!isNil(viewMeta.fieldValue)) {
+          const fieldName = alignment.annotationFields[viewMeta.valueField]?.name
+          let fieldContent = `${viewMeta.fieldValue}`
+          if (restOfGroup) {
+            fieldContent += ` + ${restOfGroup} others`
+          }
+          extraInfo.push(<div key="other" className="other">{fieldName}: {fieldContent}</div>)
+        }
+      }
+
       return {
-        key: `${viewMeta.id} ${sequenceIndex} ${residueIndex}`,
+        event, 
+        cell: this, 
+        viewMeta, 
+        iconName, 
+
+        rowIndex, 
+        colIndex, 
+        sequencePosition, 
+        sequenceRowIndex,
+        visible: { top, bottom, left, right, width: right - left, height: bottom - top },
+        clip: { top: topClip, bottom: bottomClip, left: leftClip, right: rightClip },
+
+        key: `${viewMeta.id} ${sequenceIndex} ${sequencePosition}`,
         sequenceIndex,
-        residueIndex,
-        row,
-        col,
         sequenceId,
-        content,
-        anchorX,
-        anchorY,
-        anchorWidth,
-        anchorHeight,
+        extraInfo,      
       }
     }
-  
+    
     onClick(info: TAVMouseEventInfo) {
       // implemented in subclasses
     }
@@ -231,14 +239,14 @@ export class TableDataCellWithEvents extends withEvents(AVTableDataCell) {
   protected lineHeight = 0
 
   protected initCell(): void {
-    this.lineHeight = this.spreadsheet.avStore.dimensions.rowHeight
+    this.lineHeight = this.spreadsheet.options.avExtraOptions.dimensions.rowHeight
     super.initCell()
     this.drawGroupAppendixShape()
   }
 
   getContentArea(): { x: number; y: number; width: number; height: number; } {
     const area = super.getContentArea()
-    if (this.spreadsheet.avStore.isCollapsedGroupAtRowIndex[this.getMeta().rowIndex]) {
+    if (this.spreadsheet.options.avExtraOptions.isCollapsedGroupAtRowIndex[this.getMeta().rowIndex]) {
       area.height -= this.lineHeight
     }
     return area
@@ -246,23 +254,23 @@ export class TableDataCellWithEvents extends withEvents(AVTableDataCell) {
 
   protected drawGroupAppendixShape(): void {
     const spreadsheet = this.spreadsheet
-    const avStore = spreadsheet.avStore
-    if (avStore.isOverviewMode) {
+    const avExtraOptions = spreadsheet.options.avExtraOptions
+    if (avExtraOptions.isOverviewMode) {
       return
     }
 
     const viewMeta = this.getMeta()
-    const alignment = avStore.alignment
+    const alignment = avExtraOptions.alignment
 
     if (!alignment) {
       return
     }
     
-    if (!avStore.isCollapsedGroupAtRowIndex[viewMeta.rowIndex]) {
+    if (!avExtraOptions.isCollapsedGroupAtRowIndex[viewMeta.rowIndex]) {
       return
     }
 
-    const groupSize = avStore.groupSizeAtRowIndex[viewMeta.rowIndex]
+    const groupSize = avExtraOptions.groupSizeAtRowIndex[viewMeta.rowIndex]
     const groupAppendix = (viewMeta.valueField === alignment.groupBy) ? `(${groupSize})` : "…"
 
     const maxTextWidth = this.getMaxTextWidth()
@@ -322,16 +330,6 @@ export class TableDataCellWithEvents extends withEvents(AVTableDataCell) {
     }
 
     super.updateByState(stateName)
-    // if (
-    //   (this.spreadsheet.isCellSelected(this)) /*&& 
-    // ((stateName === InteractionStateName.HOVER) || (stateName === InteractionStateName.HOVER_FOCUS))*/
-    // ) {
-    //   // console.log("cancel updateByState", stateName)
-    //   super.updateByState(InteractionStateName.SELECTED)
-    // } else {
-    //   // console.log("updateByState", stateName)
-    //   super.updateByState(stateName)
-    // }
   }
 }
 
@@ -585,8 +583,8 @@ function withSequence<TBase extends TConstructor<AVTableColCell> | TConstructor<
         height: cellHeight,
       })
 
-      const spreadsheet = this.spreadsheet as AVTableSheet
-      const avStore = spreadsheet.avStore
+      // const spreadsheet = this.spreadsheet as AVTableSheet
+      // const avExtraOptions = spreadsheet.options.avExtraOptions
       const visibleSequencePositionStart = (this.spreadsheet as AVTableSheet).visibleSequencePositionStart
       const visibleSequencePositionEnd = (this.spreadsheet as AVTableSheet).visibleSequencePositionEnd
   
@@ -609,31 +607,61 @@ function withSequence<TBase extends TConstructor<AVTableColCell> | TConstructor<
       // implemented in subclasses
     }
 
-    getNormalizedPosition(event: GraphEvent, target: S2CellType, viewMeta: ViewMeta | S2Node): TNormalizedPosition {
-      const { rowIndex, colIndex } = super.getNormalizedPosition(event, target, viewMeta)
-      let sequencePosition = -1
-      let sequenceRowIndex = -1
+    getMouseEventInfo(event: GraphEvent): TAVMouseEventInfo {
+      const avmei: TAVMouseEventInfo = super.getMouseEventInfo(event)
+      const spreadsheet = this.spreadsheet as AVTableSheet
+      const avExtraOptions = spreadsheet.options.avExtraOptions
+      const dimensions = avExtraOptions.dimensions
+      const alignment = avExtraOptions.alignment
 
-      const avStore = this.spreadsheet.avStore
-      const dimensions = avStore.dimensions
-      if (dimensions) {
-        const facet = this.spreadsheet.facet
+      if (dimensions && alignment) {
+        const viewMeta = this.getMeta()
+        const facet = spreadsheet.facet
         const { scrollX = 0, scrollY = 0 } = facet.getScrollOffset()
         
+        avmei.sequencePosition = Math.floor((event.x + scrollX - viewMeta.x) / dimensions.residueWidth)
         if (viewMeta.fieldValue === "$$overview$$") {
-          sequenceRowIndex = Math.floor((event.y - facet.columnHeader.getBBox().height + scrollY - viewMeta.y) / dimensions.residueHeight)
-        } else if ((target.cellType === CellTypes.DATA_CELL) && (viewMeta.rowIndex >= avStore.firstSequenceRowIndex)) {
-          sequenceRowIndex = viewMeta.rowIndex - avStore.firstSequenceRowIndex
-        } else {
-          sequenceRowIndex = -1
+          const height = dimensions.residueHeight
+          avmei.sequenceRowIndex = Math.floor((event.y - facet.columnHeader.getBBox().height + scrollY - viewMeta.y) / height)
+
+          const sortedDisplayedIndices = avExtraOptions.sortedDisplayedIndices
+          avmei.sequenceIndex = sortedDisplayedIndices[avmei.sequenceRowIndex]
+          avmei.sequenceId = alignment.annotations.__id__[avmei.sequenceIndex]
+
+          avmei.visible.height = height
+          
+          const top = avmei.visible.top + avmei.sequenceRowIndex * height - scrollY
+          if (top > avmei.visible.top) {
+            avmei.visible.top = top
+            avmei.clip.top = false
+          }
+
+          const bottom = top + height
+          if (bottom < avmei.visible.bottom) {
+            avmei.visible.bottom = bottom
+            avmei.clip.bottom = false
+          }
         }
-  
-        sequencePosition = Math.floor((event.x + scrollX - viewMeta.x) / dimensions.residueWidth)
+
+        const width = dimensions.residueWidth
+        avmei.visible.width = width
+
+        const left = viewMeta.x + avmei.sequencePosition * width - scrollX
+        if (left > avmei.visible.left) {
+          avmei.visible.left = left
+          avmei.clip.left = false
+        }
+
+        const right = left + width
+        if (right < avmei.visible.right) {
+          avmei.visible.right = right
+          avmei.clip.right = false
+        }
       }
 
-      return { rowIndex, colIndex, sequencePosition, sequenceRowIndex }
+      avmei.key = `${avmei.viewMeta.id} ${avmei.sequenceIndex} ${avmei.sequencePosition}`
+      return avmei
     }
-
   }
 }
 
