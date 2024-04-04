@@ -53,8 +53,6 @@ import { spawn, Thread, Worker } from 'threads'
 
 import { useRef, useMemo, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react'
 import {
-  Node as S2Node, 
-  GuiIcon, 
   SERIES_NUMBER_FIELD, 
   CellTypes, 
 } from '@antv/s2'
@@ -91,7 +89,7 @@ function useDimensions(
     const iconSize = zoom
     const iconMarginLeft = zoom / 2
     const iconMarginRight = 0
-    const minMinimapWidth = 20, maxMinimapWidth = 120, minimapMargin = 4
+    const minimapWidth = 120, minimapMargin = 4
     const emptyResult =  {
       zoom,
       fontFamily,
@@ -115,8 +113,7 @@ function useDimensions(
       residueNumberHeight: 0,
       residueNumberTextActualBoundingBoxDescent: 0,
       colHeight: 0,
-      minMinimapWidth, 
-      maxMinimapWidth,
+      minimapWidth, 
       minimapMargin,
       iconSize,
       iconMarginLeft,
@@ -181,8 +178,7 @@ function useDimensions(
         residueNumberHeight: 0,
         residueNumberTextActualBoundingBoxDescent: 0,
         colHeight: zoom,
-        minMinimapWidth, 
-        maxMinimapWidth,
+        minimapWidth, 
         minimapMargin,
         iconSize,
         iconMarginLeft,
@@ -291,8 +287,7 @@ function useDimensions(
       residueNumberHeight,
       residueNumberTextActualBoundingBoxDescent,
       colHeight,
-      minMinimapWidth, 
-      maxMinimapWidth, 
+      minimapWidth, 
       minimapMargin, 
       iconSize,
       iconMarginLeft,
@@ -508,9 +503,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // const sortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
   const [sortedIndices, setSortedIndices] = useState<number[]>([])
   const [overviewImageData, setOverviewImageData] = useState<ImageData | undefined>(undefined)
-  const [minimapImage, setMinimapImage] = useState<OffscreenCanvas>()
-  const maxMinimapWidth = dimensions.maxMinimapWidth
-  const maxMinimapHeight = window.innerHeight
+  const [minimapImageData, setMinimapImageData] = useState<ImageData | undefined>(undefined)
 
   useEffect(() => {
     async function asyncUpdate() {
@@ -549,7 +542,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
           }
 
           if (propsPinnedColumns === undefined) {
-            propsPinnedColumns = [] // ["__id__"]
+            propsPinnedColumns = ["__id__"]
           }
 
           if (propsOtherVisibleColumns === undefined) {
@@ -635,8 +628,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
             propsGroupBy,
             propsPositionsToStyle,
             propsDarkMode ? propsAlignmentColorPalette["Dark"] : propsAlignmentColorPalette["Light"],
-            maxMinimapWidth,
-            maxMinimapHeight,
+            dimensions.minimapWidth,
           )
           await Thread.terminate(remoteUpdateAlignment)
     
@@ -674,17 +666,12 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
               const overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewImageWidth, overviewImageHeight)
               setOverviewImageData(overviewImageData)
               
-              const minimapWidth = minimapImageWidth ?? overviewImageWidth
-              const minimapHeight = minimapImageHeight ?? overviewImageHeight
-              const newMinimapImage = new OffscreenCanvas(minimapWidth, minimapHeight)
-              const ctx = newMinimapImage?.getContext("2d")
               if (minimapBuffer && minimapImageWidth && minimapImageHeight) {
                 const minimapImageData = new ImageData(new Uint8ClampedArray(minimapBuffer), minimapImageWidth, minimapImageHeight)
-                ctx?.putImageData(minimapImageData, 0, 0)
+                setMinimapImageData(minimapImageData)
               } else {
-                ctx?.putImageData(overviewImageData, 0, 0)
+                setMinimapImageData(overviewImageData)
               }
-              setMinimapImage(newMinimapImage)
             }
     
             if (propsPositionsToStyle !== positionsToStyle) {
@@ -750,8 +737,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     positionsToStyle,
     alignmentColorPalette,
     darkMode,
-    maxMinimapWidth,
-    maxMinimapHeight,
+    dimensions.minimapWidth,
     onLoadAlignment,
     onChangeAlignment,
     onChangeSortBy,
@@ -975,7 +961,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     isCollapsedGroupAtRowIndex,
     overviewImageData, 
     showMinimap, 
-    minimapImage, 
+    minimapImageData, 
     sequenceLogos, 
     sequenceLogosGroups, 
     barSprites, 
@@ -999,7 +985,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     isCollapsedGroupAtRowIndex,
     overviewImageData, 
     showMinimap, 
-    minimapImage, 
+    minimapImageData, 
     sequenceLogos, 
     sequenceLogosGroups, 
     barSprites, 

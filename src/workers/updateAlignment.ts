@@ -37,11 +37,10 @@ function updateAlignment(
   sortedIndices: number[],
   referenceSequenceIndex: number,
   sortBy: TAlignmentSortParams[],
-  groupBy: string | undefined,
+  groupBy: string | number | false,
   positionsToStyle: TAlignmentPositionsToStyle,
   palette: Map<string, TColorEntry>,
-  maxMinimapWidth: number,
-  maxMinimapHeight: number,
+  minimapWidth: number,
 ) {
   if (tasks.includes("setReference")) {
     setReferenceSequence(alignment, referenceSequenceIndex)
@@ -85,7 +84,7 @@ function updateAlignment(
       }
     }
   
-    const [minimapWidth, minimapHeight] = scaleToFit(alignment.length, alignment.depth, maxMinimapWidth, maxMinimapHeight)
+    const minimapHeight = Math.ceil(alignment.depth / alignment.length * minimapWidth)
     if ((alignment.length > minimapWidth) || (alignment.depth > minimapHeight)) {
       const columnIndices = downSample(alignment.length, minimapWidth)
       const rowIndices = downSample(alignment.depth, minimapHeight)

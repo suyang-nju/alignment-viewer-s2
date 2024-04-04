@@ -756,17 +756,29 @@ export class AVTableSheet extends TableSheet {
       scrollY = this.maxScrollOffsetY
     }
 
-    if (scrollY !== this.prevScrollY) {
-      const { y: minimapY, height: minimapHeight } = this.minimapShape?.attr() ?? {}
-      const minimapViewportHeight = this.minimapViewportShape?.attr("height")
-      let minimapViewportY: number
-      if (this.maxScrollOffsetY === 0) {
-        minimapViewportY = minimapY
-      } else {
-        minimapViewportY = minimapY + (minimapHeight - minimapViewportHeight) * scrollY / this.maxScrollOffsetY
+    const minimapImageData = this.options.avExtraOptions.minimapImageData
+    if ((scrollY !== this.prevScrollY) && minimapImageData && this.minimapShape) {
+      const { y: minimapY, width: minimapWidth, height: minimapHeight, img: minimapImage } = this.minimapShape.attr()
+      const minimapViewportHeight = this.minimapViewportShape!.attr("height")
+      let minimapViewportY = minimapY, minimapImageOffsetY = 0
+      if (this.maxScrollOffsetY > 0) {
+        minimapViewportY += (minimapHeight - minimapViewportHeight) * scrollY / this.maxScrollOffsetY
+        minimapImageOffsetY = (minimapImageData.height - minimapHeight) * scrollY / this.maxScrollOffsetY
       }
       this.minimapViewportShape?.attr('y', minimapViewportY)
+
+      const ctx = minimapImage.getContext("2d")
+      ctx?.putImageData(
+        minimapImageData, 
+        0, 
+        -minimapImageOffsetY, 
+        0, 
+        minimapImageOffsetY, 
+        minimapWidth, 
+        minimapHeight,
+      )
     }
+
     this.prevScrollY = scrollY
   }
 
@@ -857,8 +869,8 @@ export class AVTableSheet extends TableSheet {
 
   renderMinimap() {
     // console.log("render minimap")
-    const minimapImage = this.options.avExtraOptions.minimapImage
-    if (!minimapImage) {
+    const minimapImageData = this.options.avExtraOptions.minimapImageData
+    if (!minimapImageData) {
       return
     }
 
@@ -898,11 +910,40 @@ export class AVTableSheet extends TableSheet {
       }
     })
 
-    const minimapMaxWidth = minimapBackgroundWidth - 2 * dimensions.minimapMargin
-    const minimapMaxHeight = minimapBackgroundHeight
-    const [minimapWidth, minimapHeight] = scaleToFit(minimapImage.width, minimapImage.height, minimapMaxWidth, minimapMaxHeight)
-    const minimapX = minimapBackgroundX + (minimapBackgroundWidth - minimapWidth) / 2 // + minimapMargin,
+    const { height: frozenRowGroupHeight } = this.frozenRowGroup.getClip().getBBox()
+    const scrollableHeight = this.facet.getRealHeight() - frozenRowGroupHeight // total height that's scrollable
+    const { height: panelScrollGroupHeight } = this.panelScrollGroup.getClip().getBBox()
+    // this.maxScrollOffsetY = scrollableHeight - panelScrollGroupHeight
+    this.maxScrollOffsetY = this.facet.vScrollBar?.scrollTargetMaxOffset ?? 0
+    if (this.maxScrollOffsetY < 0) {
+      this.maxScrollOffsetY = 0
+    }
+
+    let { scrollY = 0} = this.facet.getScrollOffset()
+    if (scrollY > this.maxScrollOffsetY) {
+      scrollY = this.maxScrollOffsetY
+    }
+
+    const minimapWidth = Math.min(minimapImageData.width, dimensions.minimapWidth)
+    const minimapHeight = Math.min(minimapImageData.height, minimapBackgroundHeight)
+    const minimapX = minimapBackgroundX + dimensions.minimapMargin
     const minimapY = minimapBackgroundY
+    let minimapImageOffsetY = 0
+    if (this.maxScrollOffsetY > 0) {
+      minimapImageOffsetY = (minimapImageData.height - minimapHeight) * scrollY / this.maxScrollOffsetY
+    }
+    const minimapImage = new OffscreenCanvas(minimapWidth, minimapHeight)
+    const ctx = minimapImage.getContext("2d")
+    ctx?.putImageData(
+      minimapImageData, 
+      0, 
+      -minimapImageOffsetY, 
+      0, 
+      minimapImageOffsetY, 
+      minimapWidth, 
+      minimapHeight,
+    )
+
     this.minimapShape = minimapGroup.addShape('offscreenCanvas', {
       zIndex: 2, 
       attrs: {
@@ -913,8 +954,8 @@ export class AVTableSheet extends TableSheet {
         img: minimapImage,
         sx: 0,
         sy: 0,
-        sWidth: minimapImage.width,
-        sHeight: minimapImage.height,
+        sWidth: minimapWidth,
+        sHeight: minimapHeight,
         dx: minimapX,
         dy: minimapY,
         dWidth: minimapWidth,
@@ -923,31 +964,12 @@ export class AVTableSheet extends TableSheet {
       }
     })
 
-    let minimapViewportX = minimapBackgroundX + dimensions.minimapMargin
-    if (minimapViewportX > minimapX) {
-      minimapViewportX = minimapX
-    }
-    const minimapViewportWidth = minimapBackgroundWidth - 2 * (minimapViewportX - minimapBackgroundX)
-
-    const { height: frozenRowGroupHeight } = this.frozenRowGroup.getClip().getBBox()
-    const scrollableHeight = this.facet.getRealHeight() - frozenRowGroupHeight // total height that's scrollable
-    const { height: panelScrollGroupHeight } = this.panelScrollGroup.getClip().getBBox()
-    this.maxScrollOffsetY = scrollableHeight - panelScrollGroupHeight
-    if (this.maxScrollOffsetY < 0) {
-      this.maxScrollOffsetY = 0
-    }
-
-    const minimapViewportHeight = minimapHeight * panelScrollGroupHeight / scrollableHeight
-    let { scrollY = 0} = this.facet.getScrollOffset()
-    if (scrollY > this.maxScrollOffsetY) {
-      scrollY = this.maxScrollOffsetY
-    }
-
-    let minimapViewportY: number
-    if (this.maxScrollOffsetY === 0) {
-      minimapViewportY = minimapY
-    } else {
-      minimapViewportY = minimapY + (minimapHeight - minimapViewportHeight) * scrollY / this.maxScrollOffsetY
+    const minimapViewportWidth = minimapWidth
+    const minimapViewportHeight = minimapImageData.height * panelScrollGroupHeight / scrollableHeight
+    const minimapViewportX = minimapX
+    let minimapViewportY = minimapY
+    if (this.maxScrollOffsetY > 0) {
+      minimapViewportY += (minimapHeight - minimapViewportHeight) * scrollY / this.maxScrollOffsetY
     }
 
     this.minimapViewportShape = minimapGroup.addShape('rect', {
@@ -1133,17 +1155,9 @@ const useLayoutCoordinate = (
   }
 
   if (colNode.field === "$$minimap$$") {
-    if (showMinimap && alignment?.length && alignment?.depth) {
-      if (spreadsheet.options.height) {
-        const maxMinimapHeight = spreadsheet.options.height - dimensions.colHeight
-        // const dpr = window.devicePixelRatio
-        // const maxMinimapHeight = spreadsheet.getCanvasElement().height / dpr - dimensions.colHeight
-        colNode.width = scaleToFit(
-          alignment.length, alignment.depth, dimensions.maxMinimapWidth, maxMinimapHeight
-        )[0] + scrollbarSize + 2 * dimensions.minimapMargin  
-      }
-    } else {
-      colNode.width = scrollbarSize
+    colNode.width = scrollbarSize
+    if (showMinimap) {
+      colNode.width += dimensions.minimapWidth + 2 * dimensions.minimapMargin
     }
     return 
   }
