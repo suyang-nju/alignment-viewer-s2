@@ -4,10 +4,15 @@ import type { TAVMouseEventInfo } from '../types'
 import { isNumber } from 'lodash'
 
 import { isGapChar } from '../sequence'
-import { shouldBeStyledFactory } from '../alignment'
-import { TableDataCellWithEventsAndSequence } from './base'
+import { shouldBeStyledFactory } from '../Alignment'
+import { TableDataCellWithEventsAndSequence, drawContent } from './base'
 
 export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
+  // drawContent(): void {
+  //   // console.log("drawContent", this.getMeta())
+  //   drawContent(this.spreadsheet, this)
+  // }
+
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {
     const spreadsheet = this.spreadsheet
     const avExtraOptions = spreadsheet.options.avExtraOptions

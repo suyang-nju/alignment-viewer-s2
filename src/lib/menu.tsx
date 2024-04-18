@@ -23,6 +23,7 @@ import {
   PicCenterOutlined,
 } from '@ant-design/icons'
 import { BsTextCenter, BsDistributeVertical } from "react-icons/bs"
+import { FaFilter } from "react-icons/fa"
 import { isNil, find, isNumber } from 'lodash'
 
 import {
@@ -51,6 +52,7 @@ type TContextMenuProps = {
   showSortByColumns: () => void,
   // setGroupBy: (by: string | number | false | undefined) => void,
   setGroupBy: React.Dispatch<React.SetStateAction<string | number | false | undefined>>,
+  onOpenColumnFilter: (field: string, info: TAVMouseEventInfo) => void,
   // setReferenceSequenceIndex: (referenceSequenceIndex: number) => void,
   setReferenceSequenceIndex: React.Dispatch<React.SetStateAction<number | undefined>>,
   showImportAnnotations: () => void,
@@ -78,22 +80,55 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
     (sortBy !== undefined) &&
     (groupBy !== undefined)
   ) {
+    const { Text } = Typography
+    let currentField: string
     if (contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) {
-      const { Text } = Typography
-      const currentField = contextMenuEventInfo?.viewMeta.field
-      const currentFieldName = currentField ? annotationFields[currentField]?.name : undefined
+      currentField = contextMenuEventInfo?.viewMeta.field as string
+    } else {
+      currentField = contextMenuEventInfo?.viewMeta.valueField as string
+    }
+    const currentFieldName = annotationFields[currentField]?.name
+
+    if ((contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) && (!isOverviewMode)) { // can't customize visible columns in overview mode
+      // Show / hide columns
+      if (availableColumnsImported.includes(currentField) || availableColumnsDerived.includes(currentField)) {
+        contextMenuItems.push({
+          key: "pin-unpin-" + currentField,
+          label: <>{pinnedColumns.includes(currentField) ? "Unpin" : "Pin"} <Text italic>{currentFieldName}</Text></>,
+          icon: pinnedColumns.includes(currentField) ? <PushpinOutlined/> : <PushpinFilled/>,
+        }, {
+          key: "hide-column-" + currentField,
+          label: <>Hide <Text italic>{currentFieldName}</Text></>,
+          icon: <EyeInvisibleOutlined/>
+        })
+      }
+
+      contextMenuItems.push({
+        key: "show-hide-columns",
+        label: "Show / hide columns",
+        children: createShowHideColumnsMenu(props)
+      })
+    }
+
+
+    // Sort by columns
+    if (contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) {
+      // contextMenuItems.push({
+      //   key: "show-hide-column-divider",
+      //   type: "divider"
+      // })
 
       let isSortedByCurrentField: "asc" | "desc" | "no" = "no"
       if (sortBy.length > 0) {
         for (const by of sortBy) {
-          if (contextMenuEventInfo?.viewMeta.field === by.field) {
+          if (currentField === by.field) {
             isSortedByCurrentField = by.order
           }
         }
       }
 
       const sortSubmenuItems: MenuProps['items'] = []
-      if (contextMenuEventInfo.viewMeta.field && !HIDDEN_ANNOTATION_FIELDS.includes(contextMenuEventInfo.viewMeta.field)) {
+      if (!HIDDEN_ANNOTATION_FIELDS.includes(currentField)) {
         sortSubmenuItems.push({
           key: "sort-asc",
           label: <>Ascending <Text italic>{currentFieldName}</Text></>,
@@ -105,8 +140,10 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
         })
       }
       
-      // Sort by columns
       contextMenuItems.push({
+        key: "sort-column-divider",
+        type: "divider"
+      }, {
         key: "sort-submenu",
         label: "Sort sequences by",
         children: sortSubmenuItems.concat(createSortMenu({
@@ -119,57 +156,57 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
           paddingXS,
         }) ?? []),
       })
+    }
 
-      if (!isOverviewMode) { // can't customize visible columns in overview mode
-        // Show / hide columns
-        if (currentField && (availableColumnsImported.includes(currentField) || availableColumnsDerived.includes(currentField))) {
-          contextMenuItems.push({
-            key: "show-hide-column-divider",
-            type: "divider"
-          }, {
-            key: "pin-unpin-" + currentField,
-            label: <>{pinnedColumns.includes(currentField) ? "Unpin" : "Pin"} <Text italic>{currentFieldName}</Text></>,
-            icon: pinnedColumns.includes(currentField) ? <PushpinOutlined/> : <PushpinFilled/>,
-          }, {
-            key: "hide-column-" + currentField,
-            label: <>Hide <Text italic>{currentFieldName}</Text></>,
-            icon: <EyeInvisibleOutlined/>
-          })
-        }
-
+    // Group by column
+    if (contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) {
+      contextMenuItems.push({
+        key: "group-by-column-divider",
+        type: "divider"
+      })
+  
+      if (availableColumnsImported.includes(currentField) || availableColumnsDerived.includes(currentField)) {
         contextMenuItems.push({
-          key: "show-hide-columns",
-          label: "Show / hide columns",
-          children: createShowHideColumnsMenu(props)
-        })
-      }
-
-      // Group by column
-      if (currentField && (availableColumnsImported.includes(currentField) || availableColumnsDerived.includes(currentField))) {
-        contextMenuItems.push({
-          key: "group-by-column-divider",
-          type: "divider"
-        }, {
           key: "group-ungroup-by-" + currentField,
           label: <>{(groupBy === currentField) ? "Ungroup by" : "Group by"} <Text italic>{currentFieldName}</Text></>,
           icon: (groupBy === currentField) ? <BsTextCenter /> : <BsDistributeVertical/>,
         })
       }
-
-      contextMenuItems.push({
-        key: "group-by",
-        label: "Group by",
-        children: createGroupByMenu(props)
-      })    
     }
 
     const currentResidueIndex = contextMenuEventInfo?.sequencePosition
-    if (currentResidueIndex !== undefined) {
+    if (currentResidueIndex !== -1) {
       contextMenuItems.push({
         key: "group-ungroup-by-sequence-position",
         label: (groupBy === currentResidueIndex) ? "Ungroup by this position" : "Group by this position",
         icon: (groupBy === currentResidueIndex) ? <BsTextCenter /> : <BsDistributeVertical/>,
       })
+    }
+
+    if (contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) {
+      contextMenuItems.push({
+        key: "group-by",
+        label: "Group by",
+        children: createGroupByMenu(props)
+      })
+    }
+
+    // Filter by column
+    if (contextMenuEventInfo?.cell?.cellType === CellTypes.COL_CELL) {
+      if (
+        availableColumnsImported.includes(currentField) || 
+        availableColumnsDerived.includes(currentField) || 
+        (currentField === "__sequenceIndex__")
+      ) {
+        contextMenuItems.push({
+          key: "filter-divider",
+          type: "divider"
+        }, {
+          key: "filter-by-" + currentField,
+          label: <>Filter by <Text italic>{(currentField === "__sequenceIndex__")? "Sequence" : currentFieldName}</Text></>,
+          icon: <FaFilter/>,
+        })
+      }
     }
 
     const currentSequenceIndex = contextMenuEventInfo?.sequenceIndex
@@ -182,7 +219,7 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
       }
     }
     
-    fixIcons(contextMenuItems)
+    fixMenuIcons(contextMenuItems)
   }
 
   return ({
@@ -261,6 +298,9 @@ export function createSortMenu({
       label: "Descending",
       children: sortDescByOneColumnMenuItems,
     }, {
+      key: "sort-submenu-divider-2",
+      type: "divider",
+    }, {
       key: "sort-advanced",
       label: "More Options...",
       icon: (sortBy.length > 1) ? <CheckOutlined /> : null,
@@ -295,7 +335,7 @@ export function createSortMenu({
     }
   }
 
-  return fixIcons(sortSubmenuItems)
+  return fixMenuIcons(sortSubmenuItems)
 }
 
 export function createShowHideColumnsMenu({
@@ -345,8 +385,8 @@ export function createShowHideColumnsMenu({
     }
 
     showHideColumnsSubmenuItems.push({
-      key: "import-annotations", 
-      label: "Import annotations...",
+      key: "show-hide-columns-advanced", 
+      label: "More Options...",
     })
 
     showHideColumnsSubmenuItems.push({
@@ -355,12 +395,12 @@ export function createShowHideColumnsMenu({
     })
     
     showHideColumnsSubmenuItems.push({
-      key: "show-hide-columns-advanced", 
-      label: "More options...",
+      key: "import-annotations", 
+      label: "Import Annotations...",
     })
   }
 
-  return fixIcons(showHideColumnsSubmenuItems)
+  return fixMenuIcons(showHideColumnsSubmenuItems)
 }
 
 export function createGroupByMenu({
@@ -423,10 +463,10 @@ export function createGroupByMenu({
     }
   }
 
-  return fixIcons(groupByMenuItems)
+  return fixMenuIcons(groupByMenuItems)
 }
 
-function fixIcons(items: MenuProps["items"]): MenuProps["items"] {
+export function fixMenuIcons(items: MenuProps["items"]): MenuProps["items"] {
   if (isNil(items)) {
     return
   }
@@ -457,7 +497,7 @@ function fixIcons(items: MenuProps["items"]): MenuProps["items"] {
   }
 
   for (const submenu of submenus) {
-    fixIcons(submenu)
+    fixMenuIcons(submenu)
   }
 
   return items
@@ -474,7 +514,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
     otherVisibleColumns, 
     sortBy, 
     groupBy, 
-    contextMenuEventInfo: contextMenuEventInfo, 
+    contextMenuEventInfo, 
     paddingXS,
     setOtherVisibleColumns,
     setPinnedColumns,
@@ -482,6 +522,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
     setSortBy,
     showSortByColumns,
     setGroupBy,
+    onOpenColumnFilter,
     setReferenceSequenceIndex,
     showImportAnnotations,
   } = props
@@ -568,6 +609,14 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
         const field = key.substring("group-by-".length)
         if (field !== groupBy) {
           setGroupBy(field)
+        }
+      } else if (key.startsWith("filter-by-")) {
+        if (contextMenuEventInfo) {
+          let field = key.substring("filter-by-".length)
+          if (field === "__sequenceIndex__") {
+            field = "$$sequence$$"
+          }
+          onOpenColumnFilter(field, contextMenuEventInfo)
         }
       } else if (key === "set-reference-sequence") {
         const referenceSequenceIndex = contextMenuEventInfo?.sequenceIndex

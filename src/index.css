@@ -231,6 +231,7 @@ body {
 }
 
 .preview-csv {
+  font-size: smaller;
   height: 30vh;
   overflow: auto;
   background-color: var(--ant-color-bg-container);
@@ -238,8 +239,12 @@ body {
   border: var(--ant-color-border) var(--ant-line-width) var(--ant-line-type);
 }
 
-.preview-csv .highlight {
+.preview-csv th.highlight {
   background-color: var(--ant-color-info-bg);
+}
+
+.preview-csv td.highlight {
+  background-color: color-mix(in srgb, var(--ant-color-info-bg) 75%, transparent)
 }
 
 .preview-csv table {
@@ -276,4 +281,26 @@ body {
   border-right: none;
 }
 
+.av-column-filter .body-single, .av-column-filter .body-multi {
+  display: grid;
+  gap: var(--ant-padding-sm);
+  align-items: center;
+}
 
+.av-column-filter .body-single {
+  grid-template-columns: auto auto;
+}
+
+.av-column-filter .body-multi {
+  grid-template-columns: auto auto auto auto;
+}
+
+.av-column-filter-operator-dropdown .ant-select-item-group {
+  min-height: auto;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.av-column-filter-operator-dropdown .ant-divider {
+  margin: 0 !important;
+}

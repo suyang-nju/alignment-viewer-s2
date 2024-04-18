@@ -104,6 +104,10 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
   */
 
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {    
+    if (!this.spriteShape) {
+      return
+    }
+
     const avExtraOptions = this.spreadsheet.options.avExtraOptions
     const visibleSequencePositionStart = this.spreadsheet.visibleSequencePositionStart
     const barSprites = avExtraOptions.barSprites

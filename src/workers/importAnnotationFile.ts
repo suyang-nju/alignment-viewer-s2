@@ -1,11 +1,11 @@
 import type { TAlignmentAnnotations, TSequenceAnnotationFields } from '../lib/types'
 
-import { updateAnnotations } from '../lib/alignment'
+import { updateAnnotations } from '../lib/Alignment'
 
 import Papa from 'papaparse'
 import { expose } from 'threads/worker'
 
-const PREVIEW_LINE_COUNT = 50
+const PREVIEW_LINE_COUNT = 51
 
 let fileContent = ""
 

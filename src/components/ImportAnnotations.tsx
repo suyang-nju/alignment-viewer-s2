@@ -95,14 +95,18 @@ function SelectFileOrUrl({
   )
 }
 
-function SelectDelimiter({
+function SelectDelimiterAndSequenceIdColumn({
   data,
   delimiter,
+  sequenceIdColumn,
   onDelimiterChange,
+  onSequenceIdColumnChange,
 }: {
   data: Record<string, string>[],
   delimiter: string,
+  sequenceIdColumn?: string,
   onDelimiterChange: (delimiter: string) => void
+  onSequenceIdColumnChange: (sequenceIdColumn: string) => void
 }) {
   let radioValue = delimiter
   let otherValue = ""
@@ -123,6 +127,11 @@ function SelectDelimiter({
     } else {
       onDelimiterChange(event.target.value)
     }
+  }
+
+  const options = []
+  for (const col of Object.keys(data[0])) {
+    options.push({value: col, label: col})
   }
 
   return (
@@ -147,35 +156,6 @@ function SelectDelimiter({
       </Flex>
       <Flex vertical gap="small">
         <Typography.Text>
-          Preview of imported data
-        </Typography.Text>
-        <PreviewCSV data={data} />
-      </Flex>
-    </>
-  )
-}
-
-function SelectSequenceIdColumn({
-  data,
-  sequenceIdColumn,
-  onSequenceIdColumnChange,
-}: {
-  data: Record<string, string>[],
-  sequenceIdColumn?: string,
-  onSequenceIdColumnChange: (sequenceIdColumn: string) => void
-}) {
-  if (data.length === 0) {
-    return
-  }
-
-  const options = []
-  for (const col of Object.keys(data[0])) {
-    options.push({value: col, label: col})
-  }
-  return (
-    <>
-      <Flex vertical gap="small">
-        <Typography.Text>
           Select sequence ID column:&nbsp;
           <Select
             value={sequenceIdColumn}
@@ -187,7 +167,7 @@ function SelectSequenceIdColumn({
       </Flex>
       <Flex vertical gap="small">
         <Typography.Text>
-          Preview of imported data
+          Preview of imported data (first {data.length} lines)
         </Typography.Text>
         <PreviewCSV data={data} highlightColumn={sequenceIdColumn} onColumnClick={onSequenceIdColumnChange} />
       </Flex>
@@ -310,8 +290,13 @@ export default forwardRef(function ImportAnnotations({
       onTabKeyChange={handleTabKeyChange}
       onChange={handleFileOrUrlChange}
     />,
-    <SelectDelimiter data={previewData} delimiter={delimiter} onDelimiterChange={setDelimiter} />,
-    <SelectSequenceIdColumn data={previewData} sequenceIdColumn={sequenceIdColumn} onSequenceIdColumnChange={setSequenceIdColumn} />,
+    <SelectDelimiterAndSequenceIdColumn
+      data={previewData}
+      delimiter={delimiter}
+      sequenceIdColumn={sequenceIdColumn}
+      onDelimiterChange={setDelimiter}
+      onSequenceIdColumnChange={setSequenceIdColumn}
+    />
   ]
 
   function handleOk() {
@@ -347,7 +332,7 @@ export default forwardRef(function ImportAnnotations({
         {/* {originNode} */}
         {(currentPage > 0) && <Button onClick={handleBack} >Back</Button>}
         {(currentPage < pages.length - 1) && <Button onClick={handleNext} disabled={previewData.length === 0} >Next</Button>}
-        {(currentPage === pages.length - 1) && <Button onClick={handleOk} >Finish</Button>}
+        {(currentPage === pages.length - 1) && <Button type="primary" onClick={handleOk} >Finish</Button>}
       </Flex>
     )
   }

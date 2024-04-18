@@ -16,7 +16,7 @@ import {
   groupByField,
   sortAlignment,
   shouldBeStyledFactory,
-} from '../lib/alignment'
+} from '../lib/Alignment'
 import { scaleToFit } from '../lib/utils'
 
 function downSample(fromSize: number, toSize: number): number[] {

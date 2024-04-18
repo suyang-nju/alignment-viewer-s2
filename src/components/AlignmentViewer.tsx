@@ -3,8 +3,6 @@ import type {
   S2Options, 
   S2MountContainer, 
   TargetCellInfo, 
-  LayoutResult, 
-  ResizeParams,
   SpreadSheet, 
   S2CellType, 
   HeaderIconClickParams, 
@@ -13,7 +11,6 @@ import type { Event as CanvasEvent } from '@antv/g-canvas'
 import type { SheetComponentOptions } from '@antv/s2-react'
 
 import type {
-  TColumnWidths, 
   TAVExtraOptions,
   TAlignment, 
   TAlignmentAnnotations, 
@@ -45,7 +42,7 @@ import { ObjectPool } from "../lib/objectPool"
 import { useSequenceLogos } from '../lib/sequenceLogos'
 import { alignmentColorSchema } from '../lib/AlignmentColorSchema'
 import { getObjectKeys } from '../lib/utils'
-import { getAlignmentAnnotationFields } from '../lib/alignment'
+import { getAlignmentAnnotationFields } from '../lib/Alignment'
 
 import clsx from 'clsx'
 import { spawn, Thread, Worker } from 'threads'
@@ -79,7 +76,7 @@ function useChangeDetector(prompt: string, ...args: any[]) {
 }
 
 function useDimensions(
-  alignment: TAlignment | null,
+  alignment: TAlignment | undefined,
   isOverviewMode: boolean,
   fontFamily: string, 
   residueFontFamily: string,
@@ -322,6 +319,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     style,
     // referenceSequenceIndex: propsReferenceSequenceIndex = 0,
     // groupBy: propsGroupBy,
+    filterBy: propsFilterBy,
     zoom = 12,
     isOverviewMode = false,
     toggles = defaultAlignmentViewerToggles,
@@ -339,6 +337,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     onChangeSortBy,
     onChangePinnedColumns,
     onChangeOtherVisibleColumns,
+    onOpenColumnFilter,
     onMouseHover,
     onContextMenu,
     onBusy,
@@ -360,12 +359,12 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
         return
       }
 
-      const newlyAddedColumns: string[] = []
-      for (const field of Object.keys(updatedAnnotationFields)) {
-        if (!(field in alignment.annotationFields)) {
-          newlyAddedColumns.push(field)
-        }
-      }
+      // const newlyAddedColumns: string[] = []
+      // for (const field of Object.keys(updatedAnnotationFields)) {
+      //   if (!(field in alignment.annotationFields)) {
+      //     newlyAddedColumns.push(field)
+      //   }
+      // }
 
       const newAlignment: TAlignment = {
         ...alignment,
@@ -375,13 +374,20 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
 
       setAlignment(newAlignment)
       onChangeAlignment?.(newAlignment)
-      if (newlyAddedColumns.length > 0) {
-        const newOtherVisibleColumns = [...otherVisibleColumns, ...newlyAddedColumns]
-        setOtherVisibleColumns(newOtherVisibleColumns)
-        onChangeOtherVisibleColumns?.(newOtherVisibleColumns)
-      }
+      // if (newlyAddedColumns.length > 0) {
+      //   console.log("otherVisibleColumns", otherVisibleColumns)
+      //   console.log("newlyAddedColumns", newlyAddedColumns)
+      //   const newOtherVisibleColumns = [...otherVisibleColumns, ...newlyAddedColumns]
+      //   setOtherVisibleColumns(newOtherVisibleColumns)
+      //   onChangeOtherVisibleColumns?.(newOtherVisibleColumns)
+      // }
     }
-  }), [alignment, otherVisibleColumns, onChangeAlignment, onChangeOtherVisibleColumns])
+  }), [
+    alignment, 
+    // otherVisibleColumns, 
+    onChangeAlignment, 
+    // onChangeOtherVisibleColumns
+  ])
 
   const s2Ref = useRef<AVTableSheet>(null)
 
@@ -450,6 +456,15 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     onChangeSortBy
   ])
 
+  const handleFilterActionIconClick = useCallback((field: string) => {
+    const mei = s2Ref.current?.mouseDownEventInfo
+    if (!mei) {
+       return
+    }
+
+    onOpenColumnFilter?.(field, mei)
+  }, [onOpenColumnFilter])
+
   const handleExpandCollapseGroupIconClick = useCallback((groupIndex: number) => {
     if (collapsedGroups.includes(groupIndex)) {
       const newCollapsedGroups = []
@@ -483,8 +498,10 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     // console.log(iconName, node, event)
     if (iconName.startsWith("Sort")) {
       handleSortActionIconClick(node.field)
+    } else if (iconName === "Filter") {
+      handleFilterActionIconClick(node.field)
     }
-  }, [handleSortActionIconClick])
+  }, [handleSortActionIconClick, handleFilterActionIconClick])
 
   // console.log("setS2ThemeCfg EFFECT", dimensions, scrollbarSize)
   const s2ThemeCfg = useS2ThemeCfg(
@@ -1016,22 +1033,14 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("- barSprites changed", barSprites)
   // useChangeDetector("- scrollbarSize changed", scrollbarSize)
 
-  const columnWidthsRef = useRef<TColumnWidths>({
-    alignmentUuid: alignment?.uuid,
-    fieldWidths: {},
-    isGrouped: (alignment?.groupBy !== undefined),
-    isResizing: undefined,
-    zoom,
-  })
-
   // console.log("setS2Options EFFECT", dimensions)
   const s2Options = useS2Options(
     avExtraOptions,
     alignment,
     columns,
-    columnWidthsRef,
     pinnedColumnsCount,
     sortBy,
+    propsFilterBy,
     isCollapsedGroupAtRowIndex,
     isOverviewMode,
     window.devicePixelRatio,
@@ -1045,7 +1054,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("s2Options changed", s2Options)
   // useChangeDetector("- alignment changed", alignment)
   // useChangeDetector("- columns changed", columns)
-  // useChangeDetector("- columnWidthsRef changed", columnWidthsRef)
   // useChangeDetector("- pinnedColumnsCount changed", pinnedColumnsCount)
   // useChangeDetector("- sortBy changed", sortBy)
   // useChangeDetector("- collapsedGroups changed", collapsedGroups)
@@ -1058,14 +1066,10 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   
 
 
-  const handleCellIconClick = useCallback(({ event, target, viewMeta, iconName }: TAVMouseEventInfo) => {
-    // if (!alignment?.annotations) {
-    //   return
-    // }
-
-    if ((target.cellType === CellTypes.COL_CELL) && (viewMeta.field === SERIES_NUMBER_FIELD)) {
+  const handleCellIconClick = useCallback(({ event, cell, viewMeta, iconName }: TAVMouseEventInfo) => {
+    if ((cell.cellType === CellTypes.COL_CELL) && (viewMeta.field === SERIES_NUMBER_FIELD)) {
       handleExpandCollapseAllGroupsIconClick()
-    } else if ((target.cellType === CellTypes.ROW_CELL) && (viewMeta.valueField === SERIES_NUMBER_FIELD)) {
+    } else if ((cell.cellType === CellTypes.ROW_CELL) && (viewMeta.valueField === SERIES_NUMBER_FIELD)) {
       const i = viewMeta.rowIndex - firstSequenceRowIndex
       if (i < 0) {
         return
@@ -1084,34 +1088,9 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   ])
 
   const handleMounted = useCallback((s2: SpreadSheet) => {
-    // console.log("mounted", (s2 as AVTableSheet).id)
-    // initAVStore(s2 as AVTableSheet)
-    // (s2 as AVTableSheet).updateAVStore(avExtraOptions)
+    console.log("mounted", (s2 as AVTableSheet).id)
     window.s2 = s2 as unknown as AVTableSheet
-  }, [/*avExtraOptions, initAVStore*/])
-
-  const handleLayoutResizeColWidth = useCallback((params: ResizeParams) => {
-    columnWidthsRef.current.isResizing = params.info.meta.field
   }, [])
-
-  const handleLayoutAfterHeaderLayout = useCallback((layoutResult: LayoutResult) => {
-    // console.log("handleLayoutAfterHeaderLayout", alignment?.uuid, !alignment?.uuid, alignment?.groupBy, !alignment?.groupBy)
-    if (!alignment?.uuid) {
-      return
-    }
-
-    columnWidthsRef.current.isResizing = undefined
-    columnWidthsRef.current.isGrouped = (alignment?.groupBy !== undefined)
-    columnWidthsRef.current.zoom = zoom
-    if (columnWidthsRef.current.alignmentUuid !== alignment.uuid) {
-      columnWidthsRef.current.alignmentUuid = alignment.uuid
-      columnWidthsRef.current.fieldWidths = {}
-    }
-
-    for (const node of layoutResult.colLeafNodes) {
-      columnWidthsRef.current.fieldWidths[node.field] = node.width
-    }
-  }, [alignment?.uuid, alignment?.groupBy, zoom])
 
   const handleDataCellHover = useCallback((data: TargetCellInfo): void => {
     onMouseHover?.(s2Ref.current?.mouseMoveEventInfo)
@@ -1183,9 +1162,9 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   //   console.log("destroy")
   // }, [])
 
-  const spreadsheet = useCallback((container: S2MountContainer, dataCfg: S2DataConfig, options: TAVTableSheetOptions) => {
+  const spreadsheet = useCallback((container: S2MountContainer, dataCfg: S2DataConfig, options: SheetComponentOptions) => {
     // console.log("new AVTableSheet instance")
-    return new AVTableSheet(container, dataCfg, options)
+    return new AVTableSheet(container, dataCfg, options as TAVTableSheetOptions)
   }, [])
   
   const memoizedSheetComponent = useMemo(() => {
@@ -1226,8 +1205,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
         // onAfterRender={handleAfterRender}
         onMounted={handleMounted}
         // onDestroy={handleDestroy}
-        onLayoutAfterHeaderLayout={handleLayoutAfterHeaderLayout}
-        onLayoutResizeColWidth={handleLayoutResizeColWidth}
         onCopied={(data) => {console.log(data)}}
         onDataCellEditEnd={(meta) => {console.log('onDataCellEditEnd', meta)}}
       />
@@ -1251,8 +1228,8 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     // handleAfterRender,
     handleMounted,
     // handleDestroy,
-    handleLayoutAfterHeaderLayout,
-    handleLayoutResizeColWidth,
+    // handleLayoutAfterHeaderLayout,
+    // handleLayoutResizeColWidth,
   ])
 
   return (

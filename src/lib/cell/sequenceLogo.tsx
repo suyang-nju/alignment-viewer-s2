@@ -8,6 +8,10 @@ import { TableDataCellWithEventsAndSequence } from './base'
 
 export class LogoDataCell extends TableDataCellWithEventsAndSequence {
   drawSpecificContent(sequencePositionStart: number, sequencePositionEnd: number): void {
+    if (!this.spriteShape) {
+      return
+    }
+    
     const avExtraOptions = this.spreadsheet.options.avExtraOptions
     const visibleSequencePositionStart = this.spreadsheet.visibleSequencePositionStart
     const alignment = avExtraOptions.alignment

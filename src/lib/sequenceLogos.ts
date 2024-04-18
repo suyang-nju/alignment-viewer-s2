@@ -3,7 +3,7 @@ import type {
   TUseSequenceLogosProps,
 } from './types'
 
-import { shouldBeStyledFactory } from './alignment'
+import { shouldBeStyledFactory } from './Alignment'
 import { LRUMap } from "./lru"
 
 import { useCallback, useMemo } from "react"

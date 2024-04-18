@@ -1,21 +1,26 @@
-import type { MutableRefObject } from 'react'
 import type { 
   SpreadSheet, ColHeaderConfig, S2MountContainer, S2DataConfig, 
   S2Options, ThemeCfg, ViewMeta, S2CellType, BaseCell, ScrollOffset,
   HeaderIconClickParams, HeaderActionIcon, CellDataParams, DataType, 
+  ResizeInfo, LayoutResult, 
 } from '@antv/s2'
 import type { IGroup, IShape, Event as GraphEvent } from '@antv/g-canvas'
 import type {
   TAlignment, 
   TAlignmentSortParams, 
+  TAlignmentFilter,
   TDimensions, 
   TAVColorTheme,
   TAVExtraOptions, 
-  TColumnWidths,
+  TCachedColumnWidths,
   TAVMouseEventInfo,
   TSelectedCellsRange,
   TAVTableSheetOptions,
 } from './types'
+import type {
+  TableColCellWithEventsAndSequence,
+  TableDataCellWithEventsAndSequence,
+} from './cell'
 
 import { find, findIndex, countBy, debounce, isNumber, isString, isNil } from 'lodash'
 import { 
@@ -24,14 +29,14 @@ import {
   InterceptType, copyToClipboard, CopyMIMEType,
   CellTypes, ScrollbarPositionType, InteractionStateName,
 } from '@antv/s2'
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { readableColorIsBlack } from 'color2k'
 
 import { SPECIAL_ROWS, RENDERER_TYPES } from './constants'
 import { RENDERERS, } from './renderers'
 import { ShapeBaseSupportingOffscreenCanvas } from './OffscreenCanvas'
 import { svgExport, svgSort, svgSortAsc, svgSortDesc, svgPlus, svgMinus, svgFilter, svgGroup } from './icons'
-import { scaleToFit, formatFieldName } from './utils'
+import { formatFieldName } from './utils'
 
 
 const FOREGROUND_GROUP_MINIMAP_GROUP_Z_INDEX = 10
@@ -152,6 +157,8 @@ export class AVTableSheet extends TableSheet {
     sequenceRowIndex: [-1, -1]
   }
 
+  public cachedColumnWidths: TCachedColumnWidths
+
   protected minimapBackgroundShape?: IShape
   protected minimapShape?: IShape
   protected minimapViewportShape?: IShape
@@ -166,6 +173,19 @@ export class AVTableSheet extends TableSheet {
 
   constructor(dom: S2MountContainer, dataCfg: S2DataConfig, options: TAVTableSheetOptions) {
     super(dom, dataCfg, options as S2Options)
+    
+    const alignment = options.avExtraOptions.alignment
+    const zoom = options.avExtraOptions.zoom
+    this.cachedColumnWidths = {
+      alignmentUuid: alignment?.uuid,
+      fieldWidths: {},
+      isGrouped: (alignment?.groupBy !== false),
+      isResizing: undefined,
+      zoom,
+    }
+
+    this.on(S2Event.LAYOUT_RESIZE_COL_WIDTH, this.handleLayoutResizeColWidth.bind(this))
+    this.on(S2Event.LAYOUT_AFTER_HEADER_LAYOUT, this.handleLayoutAfterHeaderLayout.bind(this))
     this.on(S2Event.GLOBAL_SCROLL, this.handleScrollbarScroll.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_MOVE, this.handleGlobalMouseMove.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_UP, this.handleGlobalMouseUp.bind(this))
@@ -259,6 +279,30 @@ export class AVTableSheet extends TableSheet {
     this.updateSequenceCells()
     this.renderSequenceGroupDividers()
     this.renderSelectionMask()
+  }
+
+  protected handleLayoutResizeColWidth({info}: {info: ResizeInfo}) {
+    this.cachedColumnWidths.isResizing = info.meta.field
+  }
+
+  protected handleLayoutAfterHeaderLayout (layoutResult: LayoutResult) {
+    const alignment = this.options.avExtraOptions.alignment
+    if (!alignment?.uuid) {
+      return
+    }
+
+    this.cachedColumnWidths.isResizing = undefined
+    this.cachedColumnWidths.isGrouped = (alignment?.groupBy !== false)
+    this.cachedColumnWidths.zoom = this.options.avExtraOptions.zoom
+    if (this.cachedColumnWidths.alignmentUuid !== alignment.uuid) {
+      this.cachedColumnWidths.alignmentUuid = alignment.uuid
+      this.cachedColumnWidths.fieldWidths = {}
+    }
+
+    console.log("handleLayoutAfterHeaderLayout")
+    for (const node of layoutResult.colLeafNodes) {
+      this.cachedColumnWidths.fieldWidths[node.field] = node.width
+    }
   }
 
   protected handleMinimapMouseDown(event: GraphEvent) {
@@ -862,7 +906,7 @@ export class AVTableSheet extends TableSheet {
       if ((viewMeta.valueField === "__sequenceIndex__") || (viewMeta.field === "__sequenceIndex__")) {
         // cell.drawBackgroundShape()
         // cell.drawTextShape()
-        cell.drawContent()
+        (cell as TableColCellWithEventsAndSequence | TableDataCellWithEventsAndSequence).drawContent()
       }
     }
   }
@@ -1095,6 +1139,7 @@ function getHeaderActionIcons(
   columns: string[],
   sortBy: TAlignmentSortParams[],
   groupBy: string | number | false | undefined,
+  filterBy: TAlignmentFilter | undefined,
   onColHeaderActionIconClick: (props: HeaderIconClickParams) => void,
 ): HeaderActionIcon[] {
   const ascendingColumns: string[] = []
@@ -1118,7 +1163,7 @@ function getHeaderActionIcons(
 
   const headerActionIcons: HeaderActionIcon[] = [{
     iconNames: ["Group", "Filter", "Sort", "SortAsc", "SortDesc"],
-    belongsCell: 'colCell',
+    belongsCell: CellTypes.COL_CELL,
     // defaultHide: true,
     displayCondition: (node: S2Node, iconName: string) => {
       switch(iconName) {
@@ -1131,8 +1176,8 @@ function getHeaderActionIcons(
         case "Sort":
           return otherSortableColumns.includes(node.field)
         case "Filter":
-          // return !unsortableColumns.includes(node.field)
-          return false
+          // console.log("Filter", node.field, !!filterBy && Object.keys(filterBy).includes(node.field))
+          return !!filterBy && Object.keys(filterBy).includes(node.field)
       }
       return false
     },
@@ -1143,14 +1188,18 @@ function getHeaderActionIcons(
 }
 
 const useLayoutCoordinate = (
-  columnWidthsRef: MutableRefObject<TColumnWidths>,
-  alignment: TAlignment | null,
+  alignment: TAlignment | undefined,
   dimensions: TDimensions, 
   headerActionIcons: HeaderActionIcon[],
   scrollbarSize: number,
   showMinimap: boolean, 
-) => useMemo(() => (spreadsheet: SpreadSheet, rowNode: S2Node, colNode: S2Node) => {
-  if (!colNode || (columnWidthsRef.current.isResizing === colNode.field)) {
+) => useCallback((spreadsheet: AVTableSheet, rowNode: S2Node, colNode: S2Node) => {
+  if (!colNode) {
+    return
+  }
+
+  if (spreadsheet.cachedColumnWidths.isResizing === colNode.field) {
+    console.log(colNode.field, colNode.width)
     return
   }
 
@@ -1169,12 +1218,12 @@ const useLayoutCoordinate = (
     return
   }
 
-  const colWidth = columnWidthsRef.current.fieldWidths[colNode.field]
+  const colWidth = spreadsheet.cachedColumnWidths.fieldWidths[colNode.field]
   if (
     (colWidth !== undefined) && 
-    (alignment?.uuid === columnWidthsRef.current.alignmentUuid) &&
-    (dimensions.zoom === columnWidthsRef.current.zoom) &&
-    (![SERIES_NUMBER_FIELD, alignment?.groupBy].includes(colNode.field) || (columnWidthsRef.current.isGrouped === !!alignment?.groupBy))
+    (alignment?.uuid === spreadsheet.cachedColumnWidths.alignmentUuid) &&
+    (dimensions.zoom === spreadsheet.cachedColumnWidths.zoom) &&
+    (![SERIES_NUMBER_FIELD, alignment?.groupBy].includes(colNode.field) || (spreadsheet.cachedColumnWidths.isGrouped === !!alignment?.groupBy))
   ) {
     colNode.width = colWidth
     return
@@ -1205,9 +1254,11 @@ const useLayoutCoordinate = (
   )) + cellPaddingLeft + cellPaddingRight + EXTRA_PIXEL
 
   let iconCount = 0
-  for (const iconName of headerActionIcons[0].iconNames) {
-    if (headerActionIcons[0].displayCondition?.(colNode, iconName)) {
-      ++iconCount
+  for (const headerActionIcon of headerActionIcons) {
+    for (const iconName of headerActionIcon.iconNames) {
+      if (headerActionIcon.displayCondition?.(colNode, iconName)) {
+        ++iconCount
+      }
     }
   }
 
@@ -1215,14 +1266,13 @@ const useLayoutCoordinate = (
     ++iconCount
   }
 
+  console.log(colNode.field, iconCount)
   if (iconCount > 0) {
     const { iconSize, iconMarginLeft, iconMarginRight } = dimensions
     colNode.width += (iconSize + iconMarginLeft + iconMarginRight) * iconCount - iconMarginRight
   }
 }, [
-  columnWidthsRef,
   alignment?.uuid,
-  alignment?.depth,
   alignment?.groupBy,
   alignment?.length,
   dimensions, 
@@ -1252,7 +1302,7 @@ function colCell(node: S2Node, spreadsheet: SpreadSheet, headerConfig: ColHeader
 
 const useDataCell = (
   isCollapsedGroupAtRowIndex: boolean[]
-) => useMemo(() => (viewMeta: ViewMeta) => {
+) => useCallback((viewMeta: ViewMeta) => {
   let renderer: RENDERER_TYPES
   let sequenceIndex: number | string
   if (viewMeta.valueField === "__sequenceIndex__") {
@@ -1296,9 +1346,9 @@ export function useS2Options(
   avExtraOptions: TAVExtraOptions,
   alignment: TAlignment | undefined,
   columns: string[],
-  columnWidthsRef: MutableRefObject<TColumnWidths>,
   pinnedColumnsCount: number,
   sortBy: TAlignmentSortParams[],
+  filterBy:TAlignmentFilter | undefined,
   isCollapsedGroupAtRowIndex: boolean[],
   isOverviewMode: boolean,
   devicePixelRatio: number,
@@ -1309,12 +1359,10 @@ export function useS2Options(
   onColHeaderActionIconClick: (props: HeaderIconClickParams) => void,
 ): TAVTableSheetOptions {
   const headerActionIcons = useMemo(() => (
-    getHeaderActionIcons(columns, sortBy, alignment?.groupBy, onColHeaderActionIconClick)
-  ), [columns,sortBy, alignment?.groupBy, onColHeaderActionIconClick])
+    getHeaderActionIcons(columns, sortBy, alignment?.groupBy, filterBy, onColHeaderActionIconClick)
+  ), [columns,sortBy, alignment?.groupBy, filterBy, onColHeaderActionIconClick])
 
-  const layoutCoordinate = useLayoutCoordinate(
-    columnWidthsRef, alignment, dimensions, headerActionIcons, scrollbarSize, showMinimap
-  )
+  const layoutCoordinate = useLayoutCoordinate(alignment, dimensions, headerActionIcons, scrollbarSize, showMinimap)
 
   const dataCell = useDataCell(isCollapsedGroupAtRowIndex)
 
@@ -1411,16 +1459,18 @@ export function useS2Options(
         resize: {
           rowCellVertical: false,
           cornerCellHorizontal: false,
-          colCellHorizontal: false,
+          colCellHorizontal: true,
           colCellVertical: false, // true if we want the header to be vertically resizable
           // visible: (cell: S2CellType) => {
           //   // Use fixed-width sequence column, because when the column width is too small,
           //   // the text will be truncated and appended with an ellipsis that is a hard-coded
           //   // 3-char "...", which cannot be.
           //   // return !["__sequenceIndex__", SERIES_NUMBER_FIELD].includes(cell.getMeta().field)
-          //   return !["__sequenceIndex__", SERIES_NUMBER_FIELD].includes(cell.getMeta().field)
+          //   // console.log(cell)
+          //   return !["__sequenceIndex__", SERIES_NUMBER_FIELD].includes(cell.getMeta().field!)
           // },
-          disable: (resizeInfo) => (resizeInfo.id === "__sequenceIndex__"),
+          disable: (resizeInfo) => (resizeInfo.meta.field === "__sequenceIndex__"),
+          // disable: (resizeInfo) => ["__sequenceIndex__", SERIES_NUMBER_FIELD].includes(resizeInfo.meta.field!),
         },
         hoverHighlight: {
           rowHeader: false,

@@ -166,11 +166,11 @@ export type TAVExtraOptions = {
   scrollbarSize: number,
 }
 
-export type TAVTableSheetOptions = SheetComponentOptions & {
+export type TAVTableSheetOptions = S2Options & {
   avExtraOptions: TAVExtraOptions
 }
 
-export type TColumnWidths = {
+export type TCachedColumnWidths = {
   alignmentUuid: string | undefined,
   fieldWidths: Record<string, number>,
   isGrouped: boolean,
@@ -319,6 +319,27 @@ export type TDimensions = {
   iconMarginRight: number,
 }
 
+export type TTextColumnFilter = {
+  connective: "and" | "or" | undefined,
+  operator: "equal" | "not-equal" | "contain" | "not-contain" | "begin" | "not-begin" | "end" | "not-end",
+  operand: string | undefined,
+  isCaseSensitive: boolean,
+  isWholeWordOnly: boolean,
+  isRegex: boolean,
+  in: string[] | undefined,
+}
+
+export type TNumberColumnFilter = {
+  connective: "and" | "or" | undefined,
+  operator: "equal" | "not-equal" | "greater" | "not-less" | "less" | "not-greater",
+  operand: number | undefined,
+  in: number[] | undefined,
+}
+
+export type TColumnFilter = TTextColumnFilter[] | TNumberColumnFilter[]
+
+export type TAlignmentFilter = Record<string, TColumnFilter>
+
 export type TAlignmentViewerProps = {
   className?: string,
   style?: CSSProperties,
@@ -328,6 +349,7 @@ export type TAlignmentViewerProps = {
   otherVisibleColumns: string[] | undefined,
   sortBy: TAlignmentSortParams[] | undefined,
   groupBy: string | number | false | undefined,
+  filterBy: TAlignmentFilter | undefined,
   zoom?: number,
   isOverviewMode?: boolean,
   toggles?: TAlignmentViewerToggles,
@@ -346,6 +368,7 @@ export type TAlignmentViewerProps = {
   onChangeSortBy?: (sortBy: TAlignmentSortParams[]) => void,
   onChangePinnedColumns?: (pinnedColumns: string[]) => void,
   onChangeOtherVisibleColumns?: (otherVisibleColumns: string[]) => void,
+  onOpenColumnFilter?: (field: string, info: TAVMouseEventInfo) => void,
   onMouseHover?: TSetMouseEventInfo,
   onContextMenu?: (info: TAVMouseEventInfo) => void,
   onBusy?: (isBusy: boolean) => void,
@@ -388,3 +411,8 @@ export type TSettingsProps = {
   onDarkModeChange: () => void,
 }
 
+export type TColumnFilterProps = {
+  filterBy: TAlignmentFilter | undefined,
+  annotationFields: TSequenceAnnotationFields,
+  onChange: (newFilterBy: TAlignmentFilter | undefined) => void,
+}

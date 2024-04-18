@@ -6,9 +6,9 @@ import type {
   TSequenceAnnotationFields,
   TAlignmentColorMode,
   TAlignmentViewerToggles, 
-  TContextualInfo, 
   TSetMouseEventInfo, 
   TAVMouseEventInfo,
+  TAlignmentFilter,
 } from '../lib/types'
 import type { MouseEvent, ReactNode } from 'react'
 import type { RadioChangeEvent, MenuProps } from 'antd'
@@ -22,6 +22,7 @@ import { alignmentColorSchema } from '../lib/AlignmentColorSchema'
 import { defaultAlignmentViewerToggles, } from './AlignmentViewer'
 import AlignmentViewerAntdWrapper from './AlignmentViewerAntdWrapper'
 import CursorTracker from './CursorTracker'
+import ColumnFilter from './ColumnFilter'
 import Settings from './Settings'
 import Welcome from './Welcome'
 import ActionMenuButton from './ActionMenuButton'
@@ -29,14 +30,14 @@ import ArrangeColumns from './ArrangeColumns'
 import SortByColumns from './SortByColumns'
 import ImportAnnotations from './ImportAnnotations'
 import { createContextMenu, createSortMenu, createGroupByMenu, createShowHideColumnsMenu } from '../lib/menu'
-import { getAlignmentAnnotationFields } from '../lib/alignment'
+import { getAlignmentAnnotationFields } from '../lib/Alignment'
 
 import { debounce } from 'lodash'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useState, useEffect, useImperativeHandle, useRef, forwardRef, useMemo, useCallback } from 'react'
 import { 
   ConfigProvider, theme as antdTheme, Flex, Space, Button, 
-  Tooltip, Tag, Typography, Layout, Spin, Dropdown, Empty,
+  Tooltip, Tag, Typography, Layout, Spin, Dropdown, 
 } from 'antd'
 import { MenuOutlined, LoadingOutlined } from '@ant-design/icons'
 import clsx from 'clsx'
@@ -231,6 +232,7 @@ export default function Chrome() {
   const arrangeColumnsRef = useRef<{open: () => void}>(null)
   const sortByColumnsRef = useRef<{open: () => void}>(null)
   const importAnnotationsRef = useRef<{open: () => void}>(null)
+  const columnFilterRef = useRef<{open: (field: string, x: number, y: number) => void}>(null)
 
   const [zoom, setZoom] = useState<number>(12)
   const isOverviewMode: boolean = (zoom <= OVERVIEW_MODE_ZOOM)
@@ -320,6 +322,7 @@ export default function Chrome() {
   const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[] | undefined>(undefined)
   const [sortBy, setSortBy] = useState<TAlignmentSortParams[] | undefined>(undefined)
   const [groupBy, setGroupBy] = useState<string | number | false | undefined>(undefined)
+  const [filterBy, setFilterBy] = useState<TAlignmentFilter | undefined>(undefined)
 
   if (fileOrUrl !== prevFileOrUrl) {
     setPrevFileOrUrl(fileOrUrl)
@@ -349,7 +352,6 @@ export default function Chrome() {
     }
     return [annotationFields, availableColumnsImported, availableColumnsDerived]
   }, [alignment])
-
 
   const handleFileOrUrlChange = /*useStartSpinning*/((newFileOrUrl: File | string) => {
     if (newFileOrUrl === file) {
@@ -392,6 +394,12 @@ export default function Chrome() {
     setSortBy(sortBy)
   }, [])
 
+  const handleOpenColumnFilter = useCallback((field: string, info: TAVMouseEventInfo) => {
+    const x = (info.visible.left + info.visible.right)/2 - info.event.x + info.event.clientX
+    const y = info.visible.bottom - info.event.y + info.event.clientY
+    columnFilterRef.current?.open(field, x, y)
+  }, [])
+
   const handleLoadAlignment = useCallback((alignment: TAlignment | undefined, isLoading: boolean, error: unknown) => {
     if (alignment !== undefined) {
       setAlignment(alignment)
@@ -404,6 +412,26 @@ export default function Chrome() {
 
     setError(error)
   }, [])
+
+  const handleImportAnnotationsComplete = useCallback((updatedAnnotations: TAlignmentAnnotations, updatedAnnotationFields: TSequenceAnnotationFields) => {
+    if (!alignment) {
+      return
+    }
+  
+    alignmentViewerRef.current?.updateAnnotations(updatedAnnotations, updatedAnnotationFields)
+
+    const newlyAddedColumns: string[] = []
+    for (const field of Object.keys(updatedAnnotationFields)) {
+      if (!(field in alignment.annotationFields)) {
+        newlyAddedColumns.push(field)
+      }
+    }
+
+    if (newlyAddedColumns.length > 0) {
+      const newOtherVisibleColumns = otherVisibleColumns ? [...otherVisibleColumns, ...newlyAddedColumns] : newlyAddedColumns
+      setOtherVisibleColumns(newOtherVisibleColumns)
+    }
+  }, [alignment, otherVisibleColumns])
 
   let displayFileName: string | ReactNode = ""
   if (alignment) {
@@ -426,7 +454,7 @@ export default function Chrome() {
       pinnedColumns,
       sortBy, 
       groupBy,
-      contextMenuEventInfo: contextMenuEventInfo, 
+      contextMenuEventInfo, 
       paddingXS: antdThemeToken.paddingXS,
       setOtherVisibleColumns,
       setPinnedColumns,
@@ -434,6 +462,7 @@ export default function Chrome() {
       setSortBy,
       showSortByColumns,
       setGroupBy,
+      onOpenColumnFilter: handleOpenColumnFilter,
       setReferenceSequenceIndex,
       showImportAnnotations,
     })
@@ -449,6 +478,7 @@ export default function Chrome() {
     groupBy,
     contextMenuEventInfo, 
     antdThemeToken.paddingXS,
+    handleOpenColumnFilter,
   ])
 
   const sortMenu = {
@@ -516,6 +546,7 @@ export default function Chrome() {
         otherVisibleColumns={otherVisibleColumns}
         sortBy={sortBy}
         groupBy={groupBy}
+        filterBy={filterBy}
         residueFontFamily="monospace"
         toggles={toggles}
         zoom={zoom}
@@ -530,6 +561,7 @@ export default function Chrome() {
         onChangeOtherVisibleColumns={handleChangeOtherVisibleColumns}
         onChangePinnedColumns={handleChangePinnedColumns}
         onChangeSortBy={handleChangeSortBy}
+        onOpenColumnFilter={handleOpenColumnFilter}
         onLoadAlignment={handleLoadAlignment}
         onMouseHover={handleAlignmentViewerMouseHover}
         onContextMenu={setContextMenuEventInfo}
@@ -543,6 +575,7 @@ export default function Chrome() {
     pinnedColumns,
     sortBy,
     groupBy,
+    filterBy,
     toggles,
     zoom,
     isOverviewMode,
@@ -556,6 +589,7 @@ export default function Chrome() {
     handleChangePinnedColumns,
     handleChangeOtherVisibleColumns,
     handleChangeSortBy,
+    handleOpenColumnFilter,
     handleAlignmentViewerMouseHover,
     handleAlignmentViewerBusy,
   ])
@@ -615,6 +649,12 @@ export default function Chrome() {
             }
           </div>
         </Dropdown>
+        <ColumnFilter 
+          ref={columnFilterRef}
+          filterBy={filterBy} 
+          annotationFields={annotationFields}
+          onChange={setFilterBy}
+        />
         <Flex className="test-spin-wrapper" align='center' justify='center' style={{display: spinning? "flex" : "none"}}>
           <div className="test-spin-mask"/>
           {/* <BusyIndicator style={{width: 300}} /> */}
@@ -667,7 +707,8 @@ export default function Chrome() {
         ref={importAnnotationsRef}
         annotations={alignment?.annotations}
         annotationFields={alignment?.annotationFields}
-        onComplete={alignmentViewerRef.current?.updateAnnotations}
+        // onComplete={alignmentViewerRef.current?.updateAnnotations}
+        onComplete={handleImportAnnotationsComplete}
         onBusy={handleAlignmentViewerBusy}
       />
     </ConfigProvider>

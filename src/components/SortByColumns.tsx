@@ -7,7 +7,7 @@ import { useState, useEffect, useImperativeHandle, forwardRef } from 'react'
 import {
   Modal, Flex, Switch, Typography, Button, theme as antdTheme, 
 } from 'antd'
-import { CloseOutlined } from '@ant-design/icons'
+import { CloseOutlined, DeleteOutlined } from '@ant-design/icons'
 import {
   closestCenter, 
   DndContext, 
@@ -95,7 +95,7 @@ const SortItem = forwardRef(function SortItem(props: TSortItemProps, ref: Ref<HT
           onChange={(value: "asc"|"desc") => onOrderChange?.(field, value)}
         /> */}
         <Button
-          icon={<CloseOutlined/>} 
+          icon={<DeleteOutlined/>} 
           type="text" 
           size="small"
           onClick={() => {onClose?.(field)}}

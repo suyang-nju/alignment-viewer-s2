@@ -6,7 +6,7 @@ import { expose } from 'threads/worker'
 import {
   createAlingmentFromSequenceRecords, 
   createAlingmentFromText
-} from '../lib/alignment'
+} from '../lib/Alignment'
 import { getObjectKeys } from '../lib/utils'
 import { createSequenceRecord } from '../lib/fasta'
 
