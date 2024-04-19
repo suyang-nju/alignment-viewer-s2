@@ -9,6 +9,7 @@ import type {
   TAlignmentAnnotations,
   TAlignmentPositionalAnnotations,
   THammingDistanceCompareFunction,
+  TAlignmentFilters,
 } from './types'
 
 import {
@@ -509,11 +510,26 @@ export function shouldBeStyledFactory(
   return (residue: string, position: number) => (compareFn(residue, compareToSequence[position]) === truthValue)
 }
 
-export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortParams[]): number[] {
+export function filterAlignment(alignment: TAlignment, filterBy?: TAlignmentFilters): number[] {
+  if ((filterBy === undefined) || (Object.keys(filterBy).length === 0)) {
+    return range(0, alignment.depth)
+  }
+
+  const filteredIndices = range(0, alignment.depth) // []
+
+  return filteredIndices
+}
+
+export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortParams[], filteredIndices?: number[]): number[] {
+  if (filteredIndices === undefined) {
+    filteredIndices = filterAlignment(alignment) // range(0, alignment.depth)
+  }
+
   let sortedIndices: number[]
   if (!sortBy || (sortBy.length === 0)) {
     if (alignment.groupBy === false) {
-      sortedIndices = range(0, alignment.depth)
+      // sortedIndices = range(0, alignment.depth)
+      sortedIndices = filteredIndices
     } else { // sort by group index
       sortedIndices = []
       for (const group of alignment.groups) {

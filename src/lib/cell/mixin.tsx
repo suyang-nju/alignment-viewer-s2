@@ -617,8 +617,8 @@ function withSequence<TBase extends TConstructor<AVTableColCell> | TConstructor<
           const height = dimensions.residueHeight
           avmei.sequenceRowIndex = Math.floor((event.y - facet.columnHeader.getBBox().height + scrollY - viewMeta.y) / height)
 
-          const sortedDisplayedIndices = avExtraOptions.sortedDisplayedIndices
-          avmei.sequenceIndex = sortedDisplayedIndices[avmei.sequenceRowIndex]
+          const filteredSortedDisplayedIndices = avExtraOptions.filteredSortedDisplayedIndices
+          avmei.sequenceIndex = filteredSortedDisplayedIndices[avmei.sequenceRowIndex]
           avmei.sequenceId = alignment.annotations.__id__[avmei.sequenceIndex]
 
           avmei.visible.height = height

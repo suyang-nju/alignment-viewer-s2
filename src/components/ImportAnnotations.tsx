@@ -341,7 +341,7 @@ export default forwardRef(function ImportAnnotations({
     <Modal
       title="Import Annotations"
       open={isOpen}
-      destroyOnClose={true}
+      destroyOnClose={true} // ?
       closable={false}
       footer={footer}
       onOk={handleOk}

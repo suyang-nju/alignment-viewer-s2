@@ -281,18 +281,39 @@ body {
   border-right: none;
 }
 
-.av-column-filter .body-single, .av-column-filter .body-multi {
+.av-column-filter {
+  margin: var(--ant-margin-md) 0;
   display: grid;
-  gap: var(--ant-padding-sm);
-  align-items: center;
+  gap: var(--ant-padding-xs) var(--ant-padding-xs);
+  align-items: start;
+  grid-template-columns: auto 1fr auto;
 }
 
-.av-column-filter .body-single {
-  grid-template-columns: auto auto;
+.av-column-filter .connective {
+  grid-column: 1 / span 2;
+  justify-self: center;
 }
 
-.av-column-filter .body-multi {
-  grid-template-columns: auto auto auto auto;
+.av-column-filter .operator {
+  grid-column: 1 / span 1;
+}
+
+.av-column-filter .operand {
+  grid-column: 2 / span 1;
+}
+
+.av-column-filter .remove {
+  grid-column: 3 / span 1;
+}
+
+.av-column-filter .text-input-addon {
+  --height: calc(var(--ant-control-height) - 2 * var(--ant-input-padding-block) - 2 * var(--ant-line-width) - 4px);
+  width: var(--height) !important;
+  height: var(--height) !important;
+}
+
+.av-column-filter-operator-dropdown .rc-virtual-list-holder {
+  max-height: unset !important;
 }
 
 .av-column-filter-operator-dropdown .ant-select-item-group {

@@ -1,6 +1,7 @@
 import type {
   TAlignment, 
   TAlignmentSortParams,
+  TAlignmentFilters,
   TAlignmentPositionsToStyle,
   TColorEntry,
 } from '../lib/types'
@@ -14,10 +15,11 @@ import { Transfer } from 'threads'
 import {
   setReferenceSequence,
   groupByField,
+  filterAlignment,
   sortAlignment,
   shouldBeStyledFactory,
 } from '../lib/Alignment'
-import { scaleToFit } from '../lib/utils'
+// import { scaleToFit } from '../lib/utils'
 
 function downSample(fromSize: number, toSize: number): number[] {
   if (fromSize <= toSize) {
@@ -32,12 +34,13 @@ function downSample(fromSize: number, toSize: number): number[] {
 }
 
 function updateAlignment(
-  tasks: Array<"setReference" | "group" | "sort" | "minimap">,
+  tasks: Array<"setReference" | "group" | "filter" | "sort" | "minimap">,
   alignment: TAlignment, 
-  sortedIndices: number[],
+  filteredSortedIndices: number[],
   referenceSequenceIndex: number,
   sortBy: TAlignmentSortParams[],
   groupBy: string | number | false,
+  filterBy: TAlignmentFilters,
   positionsToStyle: TAlignmentPositionsToStyle,
   palette: Map<string, TColorEntry>,
   minimapWidth: number,
@@ -50,16 +53,21 @@ function updateAlignment(
     groupByField(alignment, groupBy)
   }
 
+  if (tasks.includes("filter")) {
+    filteredSortedIndices = filterAlignment(alignment, filterBy)
+  }
+
   if (tasks.includes("sort")) {
-    sortedIndices = sortAlignment(alignment, sortBy)
+    filteredSortedIndices = sortAlignment(alignment, sortBy, filteredSortedIndices)
   }
   
+  const overviewWidth = alignment.length, overviewHeight = filteredSortedIndices.length
   let overviewBuffer: ArrayBuffer | undefined = undefined
   let minimapBuffer: ArrayBuffer | undefined = undefined
   let minimapImageWidth: number | undefined = undefined
   let minimapImageHeight: number | undefined = undefined
   if (tasks.includes("minimap")) {
-    overviewBuffer = new ArrayBuffer(alignment.length * alignment.depth * 4)
+    overviewBuffer = new ArrayBuffer(overviewWidth * overviewHeight * 4)
     const overviewPixels = new Uint8ClampedArray(overviewBuffer)
     const shouldBeStyled = shouldBeStyledFactory(
       positionsToStyle,
@@ -69,10 +77,10 @@ function updateAlignment(
     )
 
     let k = 0
-    for (let i = 0; i < sortedIndices.length; ++i) {
-      const sequence = alignment.sequences[sortedIndices[i]]
+    for (let i = 0; i < overviewHeight; ++i) {
+      const sequence = alignment.sequences[filteredSortedIndices[i]]
       let rgba: number[] | undefined
-      for (let j = 0; j < alignment.length; ++j) {
+      for (let j = 0; j < overviewWidth; ++j) {
         if (shouldBeStyled(sequence[j], j) && (rgba = palette.get(sequence[j])?.rgba)) {
           overviewPixels[k++] = rgba[0]
           overviewPixels[k++] = rgba[1]
@@ -84,10 +92,10 @@ function updateAlignment(
       }
     }
   
-    const minimapHeight = Math.ceil(alignment.depth / alignment.length * minimapWidth)
-    if ((alignment.length > minimapWidth) || (alignment.depth > minimapHeight)) {
-      const columnIndices = downSample(alignment.length, minimapWidth)
-      const rowIndices = downSample(alignment.depth, minimapHeight)
+    const minimapHeight = Math.ceil(overviewHeight / overviewWidth * minimapWidth)
+    if ((overviewWidth > minimapWidth) || (overviewHeight > minimapHeight)) {
+      const columnIndices = downSample(overviewWidth, minimapWidth)
+      const rowIndices = downSample(overviewHeight, minimapHeight)
       minimapImageWidth = columnIndices.length
       minimapImageHeight = rowIndices.length
       minimapBuffer = new ArrayBuffer(minimapImageWidth * minimapImageHeight * 4)
@@ -95,7 +103,7 @@ function updateAlignment(
       let k = 0
       for (const i of rowIndices) {
         for (const j of columnIndices) {
-          const m = 4 * (i * alignment.length + j)
+          const m = 4 * (i * overviewWidth + j)
           minimapPixels[k++] = overviewPixels[m]
           minimapPixels[k++] = overviewPixels[m + 1]
           minimapPixels[k++] = overviewPixels[m + 2]
@@ -116,7 +124,7 @@ function updateAlignment(
 
   return Transfer([
     alignment,
-    sortedIndices,
+    filteredSortedIndices,
     overviewBuffer,
     minimapBuffer,
     minimapImageWidth, 

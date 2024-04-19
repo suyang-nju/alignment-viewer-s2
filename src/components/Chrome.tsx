@@ -8,7 +8,7 @@ import type {
   TAlignmentViewerToggles, 
   TSetMouseEventInfo, 
   TAVMouseEventInfo,
-  TAlignmentFilter,
+  TAlignmentFilters,
 } from '../lib/types'
 import type { MouseEvent, ReactNode } from 'react'
 import type { RadioChangeEvent, MenuProps } from 'antd'
@@ -29,7 +29,7 @@ import ActionMenuButton from './ActionMenuButton'
 import ArrangeColumns from './ArrangeColumns'
 import SortByColumns from './SortByColumns'
 import ImportAnnotations from './ImportAnnotations'
-import { createContextMenu, createSortMenu, createGroupByMenu, createShowHideColumnsMenu } from '../lib/menu'
+import { createContextMenu, createSortMenu, createGroupByMenu, createShowHideColumnsMenu, createFilterByMenu } from '../lib/menu'
 import { getAlignmentAnnotationFields } from '../lib/Alignment'
 
 import { debounce } from 'lodash'
@@ -232,7 +232,7 @@ export default function Chrome() {
   const arrangeColumnsRef = useRef<{open: () => void}>(null)
   const sortByColumnsRef = useRef<{open: () => void}>(null)
   const importAnnotationsRef = useRef<{open: () => void}>(null)
-  const columnFilterRef = useRef<{open: (field: string, x: number, y: number) => void}>(null)
+  const columnFilterRef = useRef<{open: (field: string) => void}>(null)
 
   const [zoom, setZoom] = useState<number>(12)
   const isOverviewMode: boolean = (zoom <= OVERVIEW_MODE_ZOOM)
@@ -322,8 +322,13 @@ export default function Chrome() {
   const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[] | undefined>(undefined)
   const [sortBy, setSortBy] = useState<TAlignmentSortParams[] | undefined>(undefined)
   const [groupBy, setGroupBy] = useState<string | number | false | undefined>(undefined)
-  const [filterBy, setFilterBy] = useState<TAlignmentFilter | undefined>(undefined)
+  const [filterBy, setFilterBy] = useState<TAlignmentFilters | undefined>(undefined)
+  // const setFilterBy = useCallback((newFilterBy: TAlignmentFilters) => {
+  //   console.log(newFilterBy)
+  //   _setFilterBy(newFilterBy)
+  // }, [])
 
+  // Re-initialize when loading a new alignment
   if (fileOrUrl !== prevFileOrUrl) {
     setPrevFileOrUrl(fileOrUrl)
     // Set the following to `undefined` to indicate we want to use default values (derived from alignment)
@@ -332,6 +337,7 @@ export default function Chrome() {
     setOtherVisibleColumns(undefined)
     setSortBy(undefined)
     setGroupBy(undefined)
+    setFilterBy(undefined)
   }
 
   const [isLoadingAlignment, setIsLoadingAlignment] = useState(false)
@@ -394,10 +400,12 @@ export default function Chrome() {
     setSortBy(sortBy)
   }, [])
 
-  const handleOpenColumnFilter = useCallback((field: string, info: TAVMouseEventInfo) => {
-    const x = (info.visible.left + info.visible.right)/2 - info.event.x + info.event.clientX
-    const y = info.visible.bottom - info.event.y + info.event.clientY
-    columnFilterRef.current?.open(field, x, y)
+  const handleChangeFilterBy = useCallback((filterBy: TAlignmentFilters) => {
+    setFilterBy(filterBy)
+  }, [])
+
+  const handleOpenColumnFilter = useCallback((field: string) => {
+    columnFilterRef.current?.open(field)
   }, [])
 
   const handleLoadAlignment = useCallback((alignment: TAlignment | undefined, isLoading: boolean, error: unknown) => {
@@ -454,6 +462,7 @@ export default function Chrome() {
       pinnedColumns,
       sortBy, 
       groupBy,
+      filterBy,
       contextMenuEventInfo, 
       paddingXS: antdThemeToken.paddingXS,
       setOtherVisibleColumns,
@@ -462,6 +471,7 @@ export default function Chrome() {
       setSortBy,
       showSortByColumns,
       setGroupBy,
+      setFilterBy,
       onOpenColumnFilter: handleOpenColumnFilter,
       setReferenceSequenceIndex,
       showImportAnnotations,
@@ -476,6 +486,7 @@ export default function Chrome() {
     pinnedColumns,
     sortBy, 
     groupBy,
+    filterBy,
     contextMenuEventInfo, 
     antdThemeToken.paddingXS,
     handleOpenColumnFilter,
@@ -513,6 +524,17 @@ export default function Chrome() {
       otherVisibleColumns,
       pinnedColumns,
       groupBy,
+    }),
+    onClick: contextMenu.onClick,
+  }
+
+  const filterByMenu = {
+    items: createFilterByMenu({
+      annotationFields,
+      availableColumnsImported,
+      availableColumnsDerived,
+      groupBy,
+      filterBy,
     }),
     onClick: contextMenu.onClick,
   }
@@ -561,6 +583,7 @@ export default function Chrome() {
         onChangeOtherVisibleColumns={handleChangeOtherVisibleColumns}
         onChangePinnedColumns={handleChangePinnedColumns}
         onChangeSortBy={handleChangeSortBy}
+        onChangeFilterBy={handleChangeFilterBy}
         onOpenColumnFilter={handleOpenColumnFilter}
         onLoadAlignment={handleLoadAlignment}
         onMouseHover={handleAlignmentViewerMouseHover}
@@ -589,6 +612,7 @@ export default function Chrome() {
     handleChangePinnedColumns,
     handleChangeOtherVisibleColumns,
     handleChangeSortBy,
+    handleChangeFilterBy,
     handleOpenColumnFilter,
     handleAlignmentViewerMouseHover,
     handleAlignmentViewerBusy,
@@ -625,6 +649,9 @@ export default function Chrome() {
                 <ActionMenuButton menu={groupMenu} checked={groupBy !== false}>
                   {groupBy === false ? "Group" : `${groupCount} Groups`}
                 </ActionMenuButton>
+                <ActionMenuButton menu={filterByMenu} checked={(filterBy !== undefined) && (Object.keys(filterBy).length > 0)}>
+                  {(filterBy && (Object.keys(filterBy).length > 0)) ? `${Object.keys(filterBy).length} Filters` : "Filter"}
+                </ActionMenuButton>
               </> 
             ) : null
             }
@@ -652,6 +679,7 @@ export default function Chrome() {
         <ColumnFilter 
           ref={columnFilterRef}
           filterBy={filterBy} 
+          annotations={alignment?.annotations}
           annotationFields={annotationFields}
           onChange={setFilterBy}
         />

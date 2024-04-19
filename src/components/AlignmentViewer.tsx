@@ -21,7 +21,8 @@ import type {
   TDimensions,
   TAlignmentViewerProps,
   TAlignmentPositionsToStyle,
-  TAVTableSheetOptions, 
+  TAVTableSheetOptions,
+  TAlignmentFilters, 
 } from '../lib/types'
 
 import {
@@ -319,7 +320,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     style,
     // referenceSequenceIndex: propsReferenceSequenceIndex = 0,
     // groupBy: propsGroupBy,
-    filterBy: propsFilterBy,
+    // filterBy: propsFilterBy,
     zoom = 12,
     isOverviewMode = false,
     toggles = defaultAlignmentViewerToggles,
@@ -335,6 +336,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     onLoadAlignment,
     onChangeAlignment,
     onChangeSortBy,
+    onChangeFilterBy,
     onChangePinnedColumns,
     onChangeOtherVisibleColumns,
     onOpenColumnFilter,
@@ -349,6 +351,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[]>([])
   const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
   const [sortBy, setSortBy] = useState<TAlignmentSortParams[]>([])
+  const [filterBy, setFilterBy] = useState<TAlignmentFilters>({})
   const [alignmentColorPalette, setAlignmentColorPalette] = useState(alignmentColorSchema[getObjectKeys(alignmentColorSchema)[0]])
   const [darkMode, setDarkMode] = useState(false)
   const [positionsToStyle, setPositionsToStyle] = useState<TAlignmentPositionsToStyle>("all")
@@ -456,15 +459,6 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     onChangeSortBy
   ])
 
-  const handleFilterActionIconClick = useCallback((field: string) => {
-    const mei = s2Ref.current?.mouseDownEventInfo
-    if (!mei) {
-       return
-    }
-
-    onOpenColumnFilter?.(field, mei)
-  }, [onOpenColumnFilter])
-
   const handleExpandCollapseGroupIconClick = useCallback((groupIndex: number) => {
     if (collapsedGroups.includes(groupIndex)) {
       const newCollapsedGroups = []
@@ -499,9 +493,9 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     if (iconName.startsWith("Sort")) {
       handleSortActionIconClick(node.field)
     } else if (iconName === "Filter") {
-      handleFilterActionIconClick(node.field)
+      onOpenColumnFilter?.(node.field)
     }
-  }, [handleSortActionIconClick, handleFilterActionIconClick])
+  }, [handleSortActionIconClick, onOpenColumnFilter])
 
   // console.log("setS2ThemeCfg EFFECT", dimensions, scrollbarSize)
   const s2ThemeCfg = useS2ThemeCfg(
@@ -517,8 +511,8 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("- scrollbarSize changed", scrollbarSize)
   // useChangeDetector("- colorTheme changed", colorTheme)  
 
-  // const sortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
-  const [sortedIndices, setSortedIndices] = useState<number[]>([])
+  // const filteredSortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
+  const [filteredSortedIndices, setFilteredSortedIndices] = useState<number[]>([])
   const [overviewImageData, setOverviewImageData] = useState<ImageData | undefined>(undefined)
   const [minimapImageData, setMinimapImageData] = useState<ImageData | undefined>(undefined)
 
@@ -535,11 +529,12 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
       let propsGroupBy = alignmentViewerProps.groupBy
       // let propsCollapsedGroups = alignmentViewerProps.collapsedGroups
       let propsSortBy = alignmentViewerProps.sortBy
+      let propsFilterBy = alignmentViewerProps.filterBy
       const propsAlignmentColorPalette = alignmentViewerProps.alignmentColorPalette ?? alignmentColorSchema[getObjectKeys(alignmentColorSchema)[0]]
       const propsDarkMode = alignmentViewerProps.darkMode ?? false
       const propsPositionsToStyle = alignmentViewerProps.positionsToStyle ?? "all"
 
-      const tasks: Array<"setReference" | "group" | "sort" | "minimap"> = []
+      const tasks: Array<"setReference" | "group" | "filter" | "sort" | "minimap"> = []
       let inputAlignment: TAlignment | undefined = undefined
       if (propsFileOrUrl && (propsFileOrUrl !== fileOrUrl)) {
         onLoadAlignment?.(undefined, true, false)
@@ -578,8 +573,12 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
           if (propsSortBy === undefined) {
             propsSortBy = []
           }
+
+          if (propsFilterBy === undefined) {
+            propsFilterBy = {}
+          }
           
-          tasks.push("setReference", "group", "sort")
+          tasks.push("setReference", "group", "filter", "sort")
         }
       } else if (alignment) {
         inputAlignment = alignment
@@ -591,6 +590,15 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
             (propsGroupBy === "__blosum62ScoreToReference__")
           ) {
             tasks.push("group")
+          }
+
+          if (
+            (propsFilterBy !== undefined) && (
+              ("__hammingDistanceToReference__" in propsFilterBy) ||
+              ("__blosum62ScoreToReference__" in propsFilterBy)
+            )
+          ) {
+            tasks.push("filter")
           }
 
           if (propsSortBy !== undefined) {
@@ -615,6 +623,10 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
           tasks.push("group", "sort")
         }
 
+        if ((propsFilterBy !== undefined) && (filterBy !== propsFilterBy) && !tasks.includes("filter")) {
+          tasks.push("filter")
+        }
+
         if ((propsSortBy !== undefined) && (sortBy !== propsSortBy) && !tasks.includes("sort")) {
           tasks.push("sort")
         }
@@ -622,7 +634,11 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
 
       if (inputAlignment) {
         if (
-          (tasks.includes("setReference") && ((propsPositionsToStyle === "sameAsReference") || (propsPositionsToStyle === "differentFromReference"))) || 
+          (tasks.includes("setReference") && (
+            (propsPositionsToStyle === "sameAsReference") || 
+            (propsPositionsToStyle === "differentFromReference")
+          )) || 
+          (tasks.includes("filter")) ||
           (tasks.includes("sort")) ||
           (propsPositionsToStyle !== positionsToStyle) || 
           (propsAlignmentColorPalette !== alignmentColorPalette) || 
@@ -635,14 +651,15 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
           const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
           const remoteUpdateAlignment = await spawn(worker)
           const [
-            outputAlignment, newSortedIndices, overviewBuffer, minimapBuffer, minimapImageWidth, minimapImageHeight
+            outputAlignment, newFilteredSortedIndices, overviewBuffer, minimapBuffer, minimapImageWidth, minimapImageHeight
           ]: [TAlignment, number[], ArrayBuffer | undefined, ArrayBuffer | undefined, number | undefined, number | undefined] = await remoteUpdateAlignment(
             tasks,
             inputAlignment,
-            sortedIndices,
+            filteredSortedIndices,
             propsReferenceSequenceIndex,
             propsSortBy,
             propsGroupBy,
+            propsFilterBy,
             propsPositionsToStyle,
             propsDarkMode ? propsAlignmentColorPalette["Dark"] : propsAlignmentColorPalette["Light"],
             dimensions.minimapWidth,
@@ -668,8 +685,14 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
             onChangeAlignment?.(newAlignment)
           }
     
-          if (didGroup || tasks.includes("sort")) {
-            setSortedIndices(newSortedIndices)
+          if (didGroup || tasks.includes("filter") || tasks.includes("sort")) {
+            setFilteredSortedIndices(newFilteredSortedIndices)
+
+            if ((propsFilterBy !== undefined) && (filterBy !== propsFilterBy)) {
+              setFilterBy(propsFilterBy)
+              onChangeFilterBy?.(propsFilterBy)
+            }
+
             if ((propsSortBy !== undefined) && (sortBy !== propsSortBy)) {
               setSortBy(propsSortBy)
               onChangeSortBy?.(propsSortBy)
@@ -741,6 +764,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     alignmentViewerProps.otherVisibleColumns,
     alignmentViewerProps.groupBy,
     alignmentViewerProps.sortBy,
+    alignmentViewerProps.filterBy,
     alignmentViewerProps.alignmentColorPalette,
     alignmentViewerProps.darkMode,
     alignmentViewerProps.positionsToStyle,
@@ -750,7 +774,8 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     otherVisibleColumns,
     collapsedGroups,
     sortBy,
-    sortedIndices,
+    filterBy,
+    filteredSortedIndices,
     positionsToStyle,
     alignmentColorPalette,
     darkMode,
@@ -758,27 +783,28 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     onLoadAlignment,
     onChangeAlignment,
     onChangeSortBy,
+    onChangeFilterBy,
     onChangeOtherVisibleColumns, 
     onChangePinnedColumns,
     onBusy,
   ])
 
-  const [sortedDisplayedIndices, isCollapsedGroup]: [number[], boolean[]] = useMemo(() => {
+  const [filteredSortedDisplayedIndices, isCollapsedGroup]: [number[], boolean[]] = useMemo(() => {
     if (alignment?.groupBy === undefined) {
       return [[], []]
     }
 
     if (alignment?.groupBy === false) {
-      return [[...sortedIndices], Array(sortedIndices.length).fill(false)]
+      return [[...filteredSortedIndices], Array(filteredSortedIndices.length).fill(false)]
     }
 
-    const sortedDisplayedIndices: number[] = []
+    const filteredSortedDisplayedIndices: number[] = []
     const isCollapsedGroup: boolean[] = []
     const shouldDisplay: boolean[] = new Array(alignment.groups.length).fill(true)
-    for (const sequenceIndex of sortedIndices) {
+    for (const sequenceIndex of filteredSortedIndices) {
       const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
       if (shouldDisplay[groupIndex]) {
-        sortedDisplayedIndices.push(sequenceIndex)
+        filteredSortedDisplayedIndices.push(sequenceIndex)
         if (collapsedGroups.includes(groupIndex)) {
           shouldDisplay[groupIndex] = false
           isCollapsedGroup.push(true)
@@ -787,9 +813,9 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
         }
       }
     }
-    return [sortedDisplayedIndices, isCollapsedGroup]
+    return [filteredSortedDisplayedIndices, isCollapsedGroup]
   }, [
-    sortedIndices, 
+    filteredSortedIndices, 
     collapsedGroups, 
     alignment?.groupBy,
     alignment?.annotations.__groupIndex__, 
@@ -802,11 +828,11 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     firstSequenceRowIndex,
     groupSizeAtRowIndex,
     isCollapsedGroupAtRowIndex,
-  } = useS2DataCfg(alignment, sortedDisplayedIndices, isCollapsedGroup, columns, isOverviewMode)
+  } = useS2DataCfg(alignment, filteredSortedDisplayedIndices, isCollapsedGroup, columns, isOverviewMode)
   // useChangeDetector()
   // useChangeDetector("s2DataCfg changed", s2DataCfg)
   // useChangeDetector("- alignment changed", alignment)
-  // useChangeDetector("- sortedDisplayedIndices changed", sortedDisplayedIndices)
+  // useChangeDetector("- filteredSortedDisplayedIndices changed", filteredSortedDisplayedIndices)
   // useChangeDetector("- columns changed", columns)
   // useChangeDetector("- isOverviewMode changed", isOverviewMode)
 
@@ -825,7 +851,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     }
 
     if (alignment?.groupBy !== undefined) {
-      for (const sequenceIndex of sortedDisplayedIndices) {
+      for (const sequenceIndex of filteredSortedDisplayedIndices) {
         const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
         if (collapsedGroups.includes(groupIndex)) {
           heights[`${i}`] = Math.ceil(SEQUENCE_LOGO_ROW_HEIGHT_RATIO * dimensions.rowHeight) + dimensions.paddingTop + dimensions.paddingBottom
@@ -838,7 +864,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   }, [
     toggles, 
     collapsedGroups, 
-    sortedDisplayedIndices,
+    filteredSortedDisplayedIndices,
     alignment?.groupBy, 
     alignment?.annotations.__groupIndex__,
     dimensions,
@@ -971,7 +997,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     sprites, 
     alignment, 
     collapsedGroups,
-    sortedDisplayedIndices, 
+    filteredSortedDisplayedIndices, 
     firstSequenceRowIndex, 
     firstResidueColIndex, 
     groupSizeAtRowIndex,
@@ -995,7 +1021,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     sprites, 
     alignment, 
     collapsedGroups,
-    sortedDisplayedIndices, 
+    filteredSortedDisplayedIndices, 
     firstSequenceRowIndex, 
     firstResidueColIndex, 
     groupSizeAtRowIndex,
@@ -1022,7 +1048,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("- sprites changed", sprites)
   // useChangeDetector("- alignment changed", alignment)
   // useChangeDetector("- collapsedGroups changed", collapsedGroups)
-  // useChangeDetector("- sortedDisplayedIndices changed", sortedDisplayedIndices)
+  // useChangeDetector("- filteredSortedDisplayedIndices changed", filteredSortedDisplayedIndices)
   // useChangeDetector("- firstSequenceRowIndex changed", firstSequenceRowIndex)
   // useChangeDetector("- firstResidueColIndex changed", firstResidueColIndex)
   // useChangeDetector("- overviewImageData changed", overviewImageData)
@@ -1040,7 +1066,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     columns,
     pinnedColumnsCount,
     sortBy,
-    propsFilterBy,
+    filterBy,
     isCollapsedGroupAtRowIndex,
     isOverviewMode,
     window.devicePixelRatio,
@@ -1074,14 +1100,14 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
       if (i < 0) {
         return
       }
-      const groupIndex = alignment?.annotations.__groupIndex__[sortedDisplayedIndices[i]]
+      const groupIndex = alignment?.annotations.__groupIndex__[filteredSortedDisplayedIndices[i]]
       if (groupIndex !== undefined) {
         handleExpandCollapseGroupIconClick(groupIndex)
       }
     }
   }, [
     firstSequenceRowIndex,
-    sortedDisplayedIndices,
+    filteredSortedDisplayedIndices,
     alignment?.annotations.__groupIndex__,
     handleExpandCollapseAllGroupsIconClick,
     handleExpandCollapseGroupIconClick

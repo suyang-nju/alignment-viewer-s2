@@ -39,7 +39,11 @@ expose({
   },
 
   update(delimiter: string, matchOnField: string, annotations: TAlignmentAnnotations, annotationFields: TSequenceAnnotationFields) {
-    const result = Papa.parse(fileContent, {header: true, delimiter})
+    const result = Papa.parse(fileContent, {
+      header: true, 
+      delimiter,
+      transform: (value) => (value || undefined),
+    })
     return updateAnnotations(annotations, annotationFields, matchOnField, result.data as Record<string, string>[])
   }
 })

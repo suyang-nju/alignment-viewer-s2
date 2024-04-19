@@ -1,4 +1,5 @@
 import type { IShape, Event as GraphEvent } from '@antv/g-canvas'
+import type { TextTheme } from '@antv/s2'
 import type { ReactNode } from 'react'
 
 import type { TAVMouseEventInfo } from '../types'
@@ -101,6 +102,17 @@ export class TableDataCellWithEvents extends TableDataCellWithEventsBasic implem
     return area
   }
 
+  protected getTextStyle(): TextTheme {
+    let style = super.getTextStyle()
+    if (this.getMeta().fieldValue === undefined) {
+      style = {
+        ...style,
+        fontStyle: "italic" as const,
+        opacity: 0.2,
+      }
+    }
+    return style
+  }
   protected drawGroupAppendixShape(): void {
     const spreadsheet = this.spreadsheet
     const avExtraOptions = spreadsheet.options.avExtraOptions
@@ -124,7 +136,7 @@ export class TableDataCellWithEvents extends TableDataCellWithEventsBasic implem
 
     const maxTextWidth = this.getMaxTextWidth()
     const {
-      options: { placeholder = "" },
+      options: { placeholder = "N/A" },
       measureTextWidth,
     } = this.spreadsheet
     const emptyPlaceholder = getEmptyPlaceholder(this, placeholder)
@@ -429,8 +441,8 @@ function getMouseEventInfoWithSequence(event: GraphEvent, spreadsheet: AVTableSh
       const height = dimensions.residueHeight
       avmei.sequenceRowIndex = Math.floor((event.y - facet.columnHeader.getBBox().height + scrollY - viewMeta.y) / height)
 
-      const sortedDisplayedIndices = avExtraOptions.sortedDisplayedIndices
-      avmei.sequenceIndex = sortedDisplayedIndices[avmei.sequenceRowIndex]
+      const filteredSortedDisplayedIndices = avExtraOptions.filteredSortedDisplayedIndices
+      avmei.sequenceIndex = filteredSortedDisplayedIndices[avmei.sequenceRowIndex]
       avmei.sequenceId = alignment.annotations.__id__[avmei.sequenceIndex]
 
       avmei.visible.height = height

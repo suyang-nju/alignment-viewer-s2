@@ -5,6 +5,7 @@ import type {
   TSequenceRecord, 
   TAVMouseEventInfo,
   TAlignment,
+  TAlignmentFilters,
 } from '../lib/types'
 import type { ReactNode } from 'react'
 
@@ -43,6 +44,7 @@ type TContextMenuProps = {
   otherVisibleColumns: string[] | undefined, 
   sortBy: TAlignmentSortParams[] | undefined, 
   groupBy: string | number | false | undefined,
+  filterBy: TAlignmentFilters | undefined,
   contextMenuEventInfo?: TAVMouseEventInfo, 
   paddingXS: number,
   setOtherVisibleColumns: React.Dispatch<React.SetStateAction<string[] | undefined>>,
@@ -52,7 +54,8 @@ type TContextMenuProps = {
   showSortByColumns: () => void,
   // setGroupBy: (by: string | number | false | undefined) => void,
   setGroupBy: React.Dispatch<React.SetStateAction<string | number | false | undefined>>,
-  onOpenColumnFilter: (field: string, info: TAVMouseEventInfo) => void,
+  setFilterBy: React.Dispatch<React.SetStateAction<TAlignmentFilters | undefined>>,
+  onOpenColumnFilter: (field: string) => void,
   // setReferenceSequenceIndex: (referenceSequenceIndex: number) => void,
   setReferenceSequenceIndex: React.Dispatch<React.SetStateAction<number | undefined>>,
   showImportAnnotations: () => void,
@@ -202,9 +205,13 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
           key: "filter-divider",
           type: "divider"
         }, {
-          key: "filter-by-" + currentField,
+          key: "filter-unfilter-by-" + currentField,
           label: <>Filter by <Text italic>{(currentField === "__sequenceIndex__")? "Sequence" : currentFieldName}</Text></>,
           icon: <FaFilter/>,
+        }, {
+            key: "filter-by",
+            label: "Filter by",
+            children: createFilterByMenu(props)
         })
       }
     }
@@ -466,6 +473,61 @@ export function createGroupByMenu({
   return fixMenuIcons(groupByMenuItems)
 }
 
+export function createFilterByMenu({
+  annotationFields = {},
+  availableColumnsImported,
+  availableColumnsDerived,
+  groupBy,
+  filterBy,
+}: {
+  annotationFields?: TSequenceAnnotationFields,
+  availableColumnsImported: string[], 
+  availableColumnsDerived: string[], 
+  groupBy: string | number | false | undefined,
+  filterBy: TAlignmentFilters | undefined,
+}): MenuProps["items"] {
+  const filterByMenuItems: MenuProps['items'] = []
+  if (filterBy !== undefined) {
+    filterByMenuItems.push({
+      key: "do-not-filter", 
+      label: "Do not filter",
+      icon: (Object.keys(filterBy).length === 0) ? <CheckOutlined/> : null,
+    })
+
+    filterByMenuItems.push({
+      key: "filter-by-column-divider-__sequenceIndex__",
+      type: "divider"
+    })
+
+    filterByMenuItems.push({
+      key: "filter-by-__sequenceIndex__", 
+      label: "Sequence",
+      icon: ("__sequenceIndex__" in filterBy) ? <CheckOutlined/> : null,
+    })
+
+    for (const availableColumns of [availableColumnsImported, availableColumnsDerived]) {
+      filterByMenuItems.push({
+        key: "filter-by-column-divider-" + availableColumns[0],
+        type: "divider"
+      })
+
+      for (const column of availableColumns) {
+        if ((column in GROUP_ANNOTATION_FIELDS) && (groupBy === false)) {
+          continue
+        }
+  
+        filterByMenuItems.push({
+          key: "filter-by-" + column,
+          label: annotationFields[column]?.name,
+          icon: (column in filterBy) ? <CheckOutlined/> : null,
+        })
+      }
+    }
+  }
+
+  return fixMenuIcons(filterByMenuItems)
+}
+
 export function fixMenuIcons(items: MenuProps["items"]): MenuProps["items"] {
   if (isNil(items)) {
     return
@@ -514,6 +576,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
     otherVisibleColumns, 
     sortBy, 
     groupBy, 
+    filterBy,
     contextMenuEventInfo, 
     paddingXS,
     setOtherVisibleColumns,
@@ -522,6 +585,7 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
     setSortBy,
     showSortByColumns,
     setGroupBy,
+    setFilterBy,
     onOpenColumnFilter,
     setReferenceSequenceIndex,
     showImportAnnotations,
@@ -533,7 +597,8 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
       (pinnedColumns !== undefined) &&
       (otherVisibleColumns !== undefined) &&
       (sortBy !== undefined) &&
-      (groupBy !== undefined)
+      (groupBy !== undefined) &&
+      (filterBy !== undefined)
     ) {
       const currentField = contextMenuEventInfo?.viewMeta?.field
       if (key === "do-not-sort") {
@@ -610,14 +675,22 @@ function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuPr
         if (field !== groupBy) {
           setGroupBy(field)
         }
-      } else if (key.startsWith("filter-by-")) {
-        if (contextMenuEventInfo) {
-          let field = key.substring("filter-by-".length)
-          if (field === "__sequenceIndex__") {
-            field = "$$sequence$$"
-          }
-          onOpenColumnFilter(field, contextMenuEventInfo)
+      } else if (key === "do-not-filter") {
+        if (Object.keys(filterBy).length > 0) {
+          setFilterBy({})
         }
+      } else if (key.startsWith("filter-unfilter-by-")) {
+        let field = key.substring("filter-unfilter-by-".length)
+        if (field === "__sequenceIndex__") {
+          field = "$$sequence$$"
+        }
+        onOpenColumnFilter(field)
+      } else if (key.startsWith("filter-by-")) {
+        let field = key.substring("filter-by-".length)
+        if (field === "__sequenceIndex__") {
+          field = "$$sequence$$"
+        }
+        onOpenColumnFilter(field)
       } else if (key === "set-reference-sequence") {
         const referenceSequenceIndex = contextMenuEventInfo?.sequenceIndex
         if (Number.isInteger(referenceSequenceIndex)) {

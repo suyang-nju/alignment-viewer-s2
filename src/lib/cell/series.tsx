@@ -27,7 +27,7 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
 
     const row = rowIndex - firstSequenceRowIndex + 1 // 1-based
     return {
-      formattedValue: (row > 0) ? `${row}` : "",
+      formattedValue: (row > 0) ? `${row}` : " ",
       value: rowIndex
     }
   }
@@ -51,19 +51,19 @@ export class SequenceSeriesCell extends TableSeriesCellWithEvents {
 
     const viewMeta = this.getMeta()
     const firstSequenceRowIndex = avExtraOptions.firstSequenceRowIndex
-    const sortedDisplayedIndices = avExtraOptions.sortedDisplayedIndices
+    const filteredSortedDisplayedIndices = avExtraOptions.filteredSortedDisplayedIndices
     const i = viewMeta.rowIndex - firstSequenceRowIndex
     if (i < 0) {
       return
     }
     
-    const sequenceIndex = sortedDisplayedIndices[i]
+    const sequenceIndex = filteredSortedDisplayedIndices[i]
     if (alignment.annotations.__groupSize__[sequenceIndex] === 1) {
       return
     }
 
-    const prevRowSequenceIndex = (i === 0) ? undefined : sortedDisplayedIndices[i - 1]
-    const nextRowSequenceIndex = (i === sortedDisplayedIndices.length - 1) ? undefined : sortedDisplayedIndices[i + 1]
+    const prevRowSequenceIndex = (i === 0) ? undefined : filteredSortedDisplayedIndices[i - 1]
+    const nextRowSequenceIndex = (i === filteredSortedDisplayedIndices.length - 1) ? undefined : filteredSortedDisplayedIndices[i + 1]
 
     const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
     const prevRowGroupIndex = (prevRowSequenceIndex === undefined) ? undefined : alignment.annotations.__groupIndex__[prevRowSequenceIndex]

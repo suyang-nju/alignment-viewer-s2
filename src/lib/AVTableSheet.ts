@@ -8,7 +8,7 @@ import type { IGroup, IShape, Event as GraphEvent } from '@antv/g-canvas'
 import type {
   TAlignment, 
   TAlignmentSortParams, 
-  TAlignmentFilter,
+  TAlignmentFilters,
   TDimensions, 
   TAVColorTheme,
   TAVExtraOptions, 
@@ -179,13 +179,12 @@ export class AVTableSheet extends TableSheet {
     this.cachedColumnWidths = {
       alignmentUuid: alignment?.uuid,
       fieldWidths: {},
-      isGrouped: (alignment?.groupBy !== false),
+      iconCounts: {},
       isResizing: undefined,
       zoom,
     }
 
     this.on(S2Event.LAYOUT_RESIZE_COL_WIDTH, this.handleLayoutResizeColWidth.bind(this))
-    this.on(S2Event.LAYOUT_AFTER_HEADER_LAYOUT, this.handleLayoutAfterHeaderLayout.bind(this))
     this.on(S2Event.GLOBAL_SCROLL, this.handleScrollbarScroll.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_MOVE, this.handleGlobalMouseMove.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_UP, this.handleGlobalMouseUp.bind(this))
@@ -285,26 +284,6 @@ export class AVTableSheet extends TableSheet {
     this.cachedColumnWidths.isResizing = info.meta.field
   }
 
-  protected handleLayoutAfterHeaderLayout (layoutResult: LayoutResult) {
-    const alignment = this.options.avExtraOptions.alignment
-    if (!alignment?.uuid) {
-      return
-    }
-
-    this.cachedColumnWidths.isResizing = undefined
-    this.cachedColumnWidths.isGrouped = (alignment?.groupBy !== false)
-    this.cachedColumnWidths.zoom = this.options.avExtraOptions.zoom
-    if (this.cachedColumnWidths.alignmentUuid !== alignment.uuid) {
-      this.cachedColumnWidths.alignmentUuid = alignment.uuid
-      this.cachedColumnWidths.fieldWidths = {}
-    }
-
-    console.log("handleLayoutAfterHeaderLayout")
-    for (const node of layoutResult.colLeafNodes) {
-      this.cachedColumnWidths.fieldWidths[node.field] = node.width
-    }
-  }
-
   protected handleMinimapMouseDown(event: GraphEvent) {
     this.isMinimapScrolling = true
     this.minimapScrollAnchorY = event.y - this.minimapViewportShape?.attr("y")
@@ -375,7 +354,7 @@ export class AVTableSheet extends TableSheet {
 
     if (overview) {
       for (let i = this.selectedCellsRange.sequenceRowIndex[0]; i <= this.selectedCellsRange.sequenceRowIndex[1]; ++i) {
-        const formattedCellValue = alignment.sequences[this.options.avExtraOptions.sortedDisplayedIndices[i]].substring(
+        const formattedCellValue = alignment.sequences[this.options.avExtraOptions.filteredSortedDisplayedIndices[i]].substring(
           this.selectedCellsRange.sequencePosition[0], this.selectedCellsRange.sequencePosition[1] + 1
         )
         formattedValues.push(formattedCellValue)
@@ -1055,19 +1034,19 @@ export class AVTableSheet extends TableSheet {
     }
 
     const seriesColNode = this.facet.layoutResult.colLeafNodes.find((node) => node.field === SERIES_NUMBER_FIELD) as S2Node
-    const sortedDisplayedIndices = this.options.avExtraOptions.sortedDisplayedIndices
+    const filteredSortedDisplayedIndices = this.options.avExtraOptions.filteredSortedDisplayedIndices
     const firstSequenceRowIndex = this.options.avExtraOptions.firstSequenceRowIndex
     const collapsedGroups = this.options.avExtraOptions.collapsedGroups
     let { minX: panelScrollGroupMinX, maxX: panelScrollGroupMaxX } = this.panelScrollGroup.getBBox()
     let { minX: frozenColGroupMinX, maxX: frozenColGroupMaxX } = this.frozenColGroup.getBBox()
     let [ colMin, colMax, rowMin = 0, rowMax = 0 ] = this.facet.preCellIndexes.center
     for (let rowIndex = rowMin + 1; rowIndex <= rowMax; ++rowIndex) {
-      const groupIndex = alignment.annotations.__groupIndex__[sortedDisplayedIndices[rowIndex - firstSequenceRowIndex]]
+      const groupIndex = alignment.annotations.__groupIndex__[filteredSortedDisplayedIndices[rowIndex - firstSequenceRowIndex]]
       if (collapsedGroups.includes(groupIndex)) {
         continue
       }
 
-      const prevRowGroupIndex = alignment.annotations.__groupIndex__[sortedDisplayedIndices[rowIndex - 1 - firstSequenceRowIndex]]
+      const prevRowGroupIndex = alignment.annotations.__groupIndex__[filteredSortedDisplayedIndices[rowIndex - 1 - firstSequenceRowIndex]]
       if (collapsedGroups.includes(prevRowGroupIndex)) {
         continue
       }
@@ -1139,7 +1118,7 @@ function getHeaderActionIcons(
   columns: string[],
   sortBy: TAlignmentSortParams[],
   groupBy: string | number | false | undefined,
-  filterBy: TAlignmentFilter | undefined,
+  filterBy: TAlignmentFilters | undefined,
   onColHeaderActionIconClick: (props: HeaderIconClickParams) => void,
 ): HeaderActionIcon[] {
   const ascendingColumns: string[] = []
@@ -1198,8 +1177,20 @@ const useLayoutCoordinate = (
     return
   }
 
+  if (spreadsheet.cachedColumnWidths.alignmentUuid !== alignment?.uuid) {
+    spreadsheet.cachedColumnWidths.alignmentUuid = alignment?.uuid
+    spreadsheet.cachedColumnWidths.fieldWidths = {}
+    spreadsheet.cachedColumnWidths.iconCounts = {}
+  }
+
+  if (spreadsheet.cachedColumnWidths.zoom !== spreadsheet.options.avExtraOptions.zoom) {
+    spreadsheet.cachedColumnWidths.zoom = spreadsheet.options.avExtraOptions.zoom
+    spreadsheet.cachedColumnWidths.fieldWidths = {}
+  }
+
   if (spreadsheet.cachedColumnWidths.isResizing === colNode.field) {
-    console.log(colNode.field, colNode.width)
+    spreadsheet.cachedColumnWidths.fieldWidths[colNode.field] = colNode.width
+    spreadsheet.cachedColumnWidths.isResizing = undefined
     return
   }
 
@@ -1208,6 +1199,7 @@ const useLayoutCoordinate = (
     if (showMinimap) {
       colNode.width += dimensions.minimapWidth + 2 * dimensions.minimapMargin
     }
+    // spreadsheet.cachedColumnWidths.fieldWidths[colNode.field] = colNode.width
     return 
   }
 
@@ -1215,17 +1207,29 @@ const useLayoutCoordinate = (
     if (alignment?.length) {
       colNode.width = dimensions.residueWidth * alignment.length // + scrollbarSize, // + dimensions.paddingLeft + dimensions.paddingRight
     }
+    // spreadsheet.cachedColumnWidths.fieldWidths[colNode.field] = colNode.width
     return
   }
 
-  const colWidth = spreadsheet.cachedColumnWidths.fieldWidths[colNode.field]
+  let iconCount = 0
+  for (const headerActionIcon of headerActionIcons) {
+    for (const iconName of headerActionIcon.iconNames) {
+      if (headerActionIcon.displayCondition?.(colNode, iconName)) {
+        ++iconCount
+      }
+    }
+  }
+
+  if ((colNode.field === SERIES_NUMBER_FIELD) && (alignment?.groupBy)) {
+    ++iconCount
+  }
+
   if (
-    (colWidth !== undefined) && 
-    (alignment?.uuid === spreadsheet.cachedColumnWidths.alignmentUuid) &&
-    (dimensions.zoom === spreadsheet.cachedColumnWidths.zoom) &&
-    (![SERIES_NUMBER_FIELD, alignment?.groupBy].includes(colNode.field) || (spreadsheet.cachedColumnWidths.isGrouped === !!alignment?.groupBy))
+    (colNode.field in spreadsheet.cachedColumnWidths.fieldWidths) &&
+    (colNode.field in spreadsheet.cachedColumnWidths.iconCounts) &&
+    (iconCount === spreadsheet.cachedColumnWidths.iconCounts[colNode.field])
   ) {
-    colNode.width = colWidth
+    colNode.width = spreadsheet.cachedColumnWidths.fieldWidths[colNode.field]
     return
   }
 
@@ -1253,24 +1257,13 @@ const useLayoutCoordinate = (
     spreadsheet.measureTextWidth(colNode.label, spreadsheet.theme.colCell?.bolderText)
   )) + cellPaddingLeft + cellPaddingRight + EXTRA_PIXEL
 
-  let iconCount = 0
-  for (const headerActionIcon of headerActionIcons) {
-    for (const iconName of headerActionIcon.iconNames) {
-      if (headerActionIcon.displayCondition?.(colNode, iconName)) {
-        ++iconCount
-      }
-    }
-  }
-
-  if ((colNode.field === SERIES_NUMBER_FIELD) && (alignment?.groupBy)) {
-    ++iconCount
-  }
-
-  console.log(colNode.field, iconCount)
   if (iconCount > 0) {
     const { iconSize, iconMarginLeft, iconMarginRight } = dimensions
     colNode.width += (iconSize + iconMarginLeft + iconMarginRight) * iconCount - iconMarginRight
   }
+
+  spreadsheet.cachedColumnWidths.fieldWidths[colNode.field] = colNode.width
+  spreadsheet.cachedColumnWidths.iconCounts[colNode.field] = iconCount
 }, [
   alignment?.uuid,
   alignment?.groupBy,
@@ -1309,13 +1302,6 @@ const useDataCell = (
     sequenceIndex = viewMeta.fieldValue as string | number
     if (isNumber(sequenceIndex)) {
       renderer = isCollapsedGroupAtRowIndex[viewMeta.rowIndex] ? RENDERER_TYPES.SEUENCE_LOGO : RENDERER_TYPES.SEQUENCE
-      // renderer = RENDERER_TYPES.SEQUENCE
-      // if (alignment?.groupBy) {
-      //   const groupIndex = alignment.annotations.__groupIndex__[sequenceIndex]
-      //   if (collapsedGroups.includes(groupIndex)) {
-      //     renderer = RENDERER_TYPES.SEUENCE_LOGO
-      //   }
-      // }
     } else {
       renderer = SPECIAL_ROWS[sequenceIndex as keyof typeof SPECIAL_ROWS]?.renderer ?? RENDERER_TYPES.SEQUENCE
     }
@@ -1348,7 +1334,7 @@ export function useS2Options(
   columns: string[],
   pinnedColumnsCount: number,
   sortBy: TAlignmentSortParams[],
-  filterBy:TAlignmentFilter | undefined,
+  filterBy:TAlignmentFilters | undefined,
   isCollapsedGroupAtRowIndex: boolean[],
   isOverviewMode: boolean,
   devicePixelRatio: number,
@@ -1397,7 +1383,7 @@ export function useS2Options(
       frozenColCount: isOverviewMode ? 0 : 1 + pinnedColumnsCount,
       frozenTrailingColCount: 1,
       frozenRowCount: Object.keys(SPECIAL_ROWS).length,
-      placeholder: "",
+      placeholder: "N/A",
       showDefaultHeaderActionIcon: false,
       headerActionIcons,
       style: {
@@ -1690,7 +1676,7 @@ export function useS2ThemeCfg(
 
 export function useS2DataCfg(
   alignment: TAlignment | undefined, 
-  sortedDisplayedIndices: number[], 
+  filteredSortedDisplayedIndices: number[], 
   isCollapsedGroup: boolean[],
   columns: string[], 
   isOverviewMode: boolean,
@@ -1711,9 +1697,9 @@ export function useS2DataCfg(
         groupSizeAtRowIndex.push(-1)
         isCollapsedGroupAtRowIndex.push(false)
       } else {
-        for (let i = 0; i < sortedDisplayedIndices.length; ++i) {
+        for (let i = 0; i < filteredSortedDisplayedIndices.length; ++i) {
           isCollapsedGroupAtRowIndex.push(isCollapsedGroup[i])
-          const sequenceIndex = sortedDisplayedIndices[i]
+          const sequenceIndex = filteredSortedDisplayedIndices[i]
           data.push({ __sequenceIndex__: sequenceIndex })
           groupSizeAtRowIndex.push(alignment.annotations.__groupSize__[sequenceIndex])
         }
@@ -1746,7 +1732,7 @@ export function useS2DataCfg(
     columns, 
     alignment?.annotations, 
     alignment?.annotationFields, 
-    sortedDisplayedIndices, 
+    filteredSortedDisplayedIndices, 
     isCollapsedGroup,
     isOverviewMode
   ])
