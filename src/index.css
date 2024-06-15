@@ -281,32 +281,50 @@ body {
   border-right: none;
 }
 
-.av-column-filter {
+.av-column-filter > * {
   margin: var(--ant-margin-md) 0;
+}
+
+/*
+.av-column-filter .filter-rules-grid {
   display: grid;
   gap: var(--ant-padding-xs) var(--ant-padding-xs);
   align-items: start;
   grid-template-columns: auto 1fr auto;
 }
 
-.av-column-filter .connective {
+.av-column-filter .filter-rules-grid .connective {
   grid-column: 1 / span 2;
   justify-self: center;
 }
 
-.av-column-filter .operator {
+.av-column-filter .filter-rules-grid .operator {
   grid-column: 1 / span 1;
 }
 
-.av-column-filter .operand {
+.av-column-filter .filter-rules-grid .operand {
   grid-column: 2 / span 1;
 }
 
-.av-column-filter .remove {
+.av-column-filter .filter-rules-grid .remove {
   grid-column: 3 / span 1;
 }
+*/
 
-.av-column-filter .text-input-addon {
+.av-column-filter .filter-rules-grid {
+  display: grid;
+  gap: var(--ant-padding-xs) var(--ant-padding-xs);
+  align-items: start;
+  grid-template-columns: auto auto 1fr auto;
+}
+
+.av-column-filter .filter-rules-grid .column-name {
+  /* height: var(--ant-control-height);
+  line-height: calc(var(--ant-control-height) - var(--ant-line-width) * 2); */
+  line-height: var(--ant-control-height);
+}
+
+.av-column-filter .filter-rules-grid .text-input-addon {
   --height: calc(var(--ant-control-height) - 2 * var(--ant-input-padding-block) - 2 * var(--ant-line-width) - 4px);
   width: var(--height) !important;
   height: var(--height) !important;
