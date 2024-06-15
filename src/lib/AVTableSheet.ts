@@ -1171,7 +1171,7 @@ function getHeaderActionIcons(
 }
 
 const useLayoutCoordinate = (
-  alignment: TAlignment | undefined,
+  alignment: TAlignment | null,
   dimensions: TDimensions, 
   headerActionIcons: HeaderActionIcon[],
   scrollbarSize: number,
