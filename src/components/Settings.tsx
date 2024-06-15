@@ -138,6 +138,24 @@ export default forwardRef(function Settings({
           </SettingsItem>
         </div>
         <div/>
+        <Space>
+          <Label>Show</Label>
+          <Select
+            id="position-to-style"
+            value={positionsToStyle}
+            // options={alignmentPositionsToStyle.map(k => ({label: k, value: k}))}
+            options={[
+              { label: "All Residues",               value: "all" }, 
+              { label: "Residues Same as Reference",          value: "sameAsReference" }, 
+              { label: "Residues Different from Reference", value: "differentFromReference" }, 
+              { label: "Residues Same as Consensus",          value: "sameAsConsensus" }, 
+              { label: "Residues Differet from Consensus",  value: "differentFromConsensus" }, 
+            ]}
+            popupMatchSelectWidth={false}
+            // size="small"
+            onChange={onPositionsToStyleChange}
+          />
+        </Space>
         <Space /*style={{justifyContent: "space-between"}}*/ >
           <Space size="small" >
             <Label>Theme</Label>
@@ -158,24 +176,6 @@ export default forwardRef(function Settings({
               onChange={(checked: boolean) => onColorModeChange(checked ? "Letter Only" : "With Background")} 
             />
           </Space>
-        </Space>
-        <Space>
-          <Label>For</Label>
-          <Select
-            id="position-to-style"
-            value={positionsToStyle}
-            // options={alignmentPositionsToStyle.map(k => ({label: k, value: k}))}
-            options={[
-              { label: "All Residues",               value: "all" }, 
-              { label: "Residues Same as Reference",          value: "sameAsReference" }, 
-              { label: "Residues Different from Reference", value: "differentFromReference" }, 
-              { label: "Residues Same as Consensus",          value: "sameAsConsensus" }, 
-              { label: "Residues Differet from Consensus",  value: "differentFromConsensus" }, 
-            ]}
-            popupMatchSelectWidth={false}
-            // size="small"
-            onChange={onPositionsToStyleChange}
-          />
         </Space>
         {(positionsToStyle !== "all") && (
           <Space size="small" >
