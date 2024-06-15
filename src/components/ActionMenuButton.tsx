@@ -7,16 +7,18 @@ import { DownOutlined } from '@ant-design/icons'
 export type TActionMenuButtonProps = PropsWithChildren<{
   menu: MenuProps,
   checked?: boolean | undefined | null,
+  trigger?: Array<"click" | "hover" | "contextMenu">
 }>
 
 export default function ActionMenuButton({
   menu,
   checked = false,
+  trigger = ["click"],
   children,
 }: TActionMenuButtonProps) {
   const antdThemeToken = antdTheme.useToken().token
   return (
-    <Dropdown menu={menu} trigger={["click"]} disabled={menu.items?.length === 0}>
+    <Dropdown menu={menu} trigger={trigger} disabled={menu.items?.length === 0}>
       <Button
         style={checked ? {background: antdThemeToken.colorInfoBgHover} : undefined}
       >
