@@ -263,7 +263,6 @@ export class AVTableSheet extends TableSheet {
     ctx.textRendering = "optimizeSpeed"
     ctx.fontKerning = "none"
 
-    
     // console.log("buildFacet")
     this.minimapBackgroundShape?.off("mousedown")
     this.minimapShape?.off("mousedown")
@@ -891,17 +890,6 @@ export class AVTableSheet extends TableSheet {
   }
 
   renderMinimap() {
-    // console.log("render minimap")
-    const minimapImageData = this.options.avExtraOptions.minimapImageData
-    if (!minimapImageData) {
-      return
-    }
-
-    const dimensions = this.options.avExtraOptions.dimensions
-    if (!dimensions) {
-      return
-    }
-
     const {
       y: panelGroupY, 
       height: panelGroupHeight
@@ -932,6 +920,16 @@ export class AVTableSheet extends TableSheet {
         fill: this.theme.background?.color,
       }
     })
+
+    const minimapImageData = this.options.avExtraOptions.minimapImageData
+    if (!minimapImageData) {
+      return
+    }
+
+    const dimensions = this.options.avExtraOptions.dimensions
+    if (!dimensions) {
+      return
+    }
 
     const { height: frozenRowGroupHeight } = this.frozenRowGroup.getClip().getBBox()
     const scrollableHeight = this.facet.getRealHeight() - frozenRowGroupHeight // total height that's scrollable
@@ -1156,7 +1154,13 @@ function getHeaderActionIcons(
           return otherSortableColumns.includes(node.field)
         case "Filter":
           // console.log("Filter", node.field, !!filterBy && Object.keys(filterBy).includes(node.field))
-          return !!filterBy && Object.keys(filterBy).includes(node.field)
+          if (!filterBy) {
+            return false
+          } else if (node.field === "__sequenceIndex__") {
+            return ("$$sequence$$" in filterBy)
+          } else {
+            return Object.keys(filterBy).includes(node.field)
+          }
       }
       return false
     },

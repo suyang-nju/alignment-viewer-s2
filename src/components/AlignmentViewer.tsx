@@ -492,8 +492,12 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     // console.log(iconName, node, event)
     if (iconName.startsWith("Sort")) {
       handleSortActionIconClick(node.field)
-    } else if (iconName === "Filter") {
-      onOpenColumnFilter?.(node.field)
+    } else if ((iconName === "Filter") && onOpenColumnFilter) {
+      let field = node.field
+      if (field === "__sequenceIndex__") {
+        field = "$$sequence$$"
+      }
+      onOpenColumnFilter(field)
     }
   }, [handleSortActionIconClick, onOpenColumnFilter])
 
@@ -512,6 +516,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   // useChangeDetector("- colorTheme changed", colorTheme)  
 
   // const filteredSortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
+  const [filteredIndices, setFilteredIndices] = useState<number[]>([])
   const [filteredSortedIndices, setFilteredSortedIndices] = useState<number[]>([])
   const [overviewImageData, setOverviewImageData] = useState<ImageData | null>(null)
   const [minimapImageData, setMinimapImageData] = useState<ImageData | null>(null)
@@ -624,7 +629,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
         }
 
         if ((propsFilterBy !== undefined) && (filterBy !== propsFilterBy) && !tasks.includes("filter")) {
-          tasks.push("filter")
+          tasks.push("filter", "sort")
         }
 
         if ((propsSortBy !== undefined) && (sortBy !== propsSortBy) && !tasks.includes("sort")) {
@@ -651,10 +656,17 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
           const worker = new Worker(new URL('../workers/updateAlignment.ts', import.meta.url), { type: 'module' })
           const remoteUpdateAlignment = await spawn(worker)
           const [
-            outputAlignment, newFilteredSortedIndices, overviewBuffer, minimapBuffer, minimapImageWidth, minimapImageHeight
-          ]: [TAlignment, number[], ArrayBuffer | undefined, ArrayBuffer | undefined, number | undefined, number | undefined] = await remoteUpdateAlignment(
+            outputAlignment, newFilteredIndices, newFilteredSortedIndices, 
+            overviewBuffer, overviewWidth, overviewHeight, 
+            minimapBuffer, minimapImageWidth, minimapImageHeight,
+          ]: [
+            TAlignment, number[], number[], 
+            ArrayBuffer | null, number, number, 
+            ArrayBuffer | null, number | undefined, number | undefined,
+          ] = await remoteUpdateAlignment(
             tasks,
             inputAlignment,
+            filteredIndices, 
             filteredSortedIndices,
             propsReferenceSequenceIndex,
             propsSortBy,
@@ -687,23 +699,25 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     
           if (didGroup || tasks.includes("filter") || tasks.includes("sort")) {
             setFilteredSortedIndices(newFilteredSortedIndices)
+          }
 
-            if ((propsFilterBy !== undefined) && (filterBy !== propsFilterBy)) {
-              setFilterBy(propsFilterBy)
-              onChangeFilterBy?.(propsFilterBy)
-            }
+          if ((propsFilterBy !== undefined) && (filterBy !== propsFilterBy)) {
+            setFilteredIndices(newFilteredIndices)
+            setFilterBy(propsFilterBy)
+            onChangeFilterBy?.(propsFilterBy)
+          }
 
-            if ((propsSortBy !== undefined) && (sortBy !== propsSortBy)) {
-              setSortBy(propsSortBy)
-              onChangeSortBy?.(propsSortBy)
-            }
+          if ((propsSortBy !== undefined) && (sortBy !== propsSortBy)) {
+            setSortBy(propsSortBy)
+            onChangeSortBy?.(propsSortBy)
           }
     
           if (tasks.includes("minimap")) {
             if (overviewBuffer) {
-              const overviewImageWidth = outputAlignment.length
-              const overviewImageHeight = outputAlignment.depth
-              const overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewImageWidth, overviewImageHeight)
+              let overviewImageData: ImageData | null = null
+              if (overviewWidth && overviewHeight) {
+                overviewImageData = new ImageData(new Uint8ClampedArray(overviewBuffer), overviewWidth, overviewHeight)
+              }
               setOverviewImageData(overviewImageData)
               
               if (minimapBuffer && minimapImageWidth && minimapImageHeight) {
@@ -775,6 +789,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
     collapsedGroups,
     sortBy,
     filterBy,
+    filteredIndices,
     filteredSortedIndices,
     positionsToStyle,
     alignmentColorPalette,

@@ -512,12 +512,98 @@ export function shouldBeStyledFactory(
   return (residue: string, position: number) => (compareFn(residue, compareToSequence[position]) === truthValue)
 }
 
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#escaping
+function escapeRegExp(regexString: string) {
+  return regexString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // $& means the whole matched string
+}
+
 export function filterAlignment(alignment: TAlignment, filterBy?: TAlignmentFilters): number[] {
   if ((filterBy === undefined) || (Object.keys(filterBy).length === 0)) {
     return range(0, alignment.depth)
   }
 
-  const filteredIndices = range(0, alignment.depth) // []
+  const filterFunctions: {[field: string]: Array<(annotation: string | number | null) => boolean>} = {}
+  for (const field of Object.keys(filterBy)) {
+    filterFunctions[field] = []
+    for (const f of filterBy[field]) {
+      let func: ((annotation: string | number | null) => boolean)
+      if (f.operator === "missing") {
+        func = (annotation) => isNil(annotation)
+      } else if (f.operator === "in") {
+        if (f.type === "text") {
+          func = (annotation) => (!isNil(annotation) && f.operand.includes(isNumber(annotation) ? `${annotation}` : annotation))
+        } else {
+          func = (annotation) => (isNumber(annotation) && (f.operand.includes(annotation)))
+        }
+      } else if (f.type === "number") {
+        switch (f.operator) {
+          case "equal":
+            func = (annotation) => (annotation === f.operand)
+            break
+          case "greater":
+            func = (annotation) => (isNumber(annotation) && (annotation > f.operand!))
+            break
+          case "less":
+            func = (annotation) => (isNumber(annotation) && (annotation < f.operand!))
+            break
+        }
+      } else { // f.type === "text"
+        const regexFlags = f.isCaseSensitive ? undefined : "i"
+        let corePattern = f.isRegex ? f.operand! : escapeRegExp(f.operand!)
+        if (f.isWholeWordOnly) {
+          corePattern = "\\b" + corePattern + "\\b"
+        }
+
+        let regex: RegExp
+        switch (f.operator) {
+          case "equal":
+            regex = new RegExp("^" + corePattern + "$", regexFlags)
+            break
+          case "contain":
+            regex = new RegExp(corePattern, regexFlags)
+            break
+          case "begin":
+            regex = new RegExp("^" + corePattern, regexFlags)
+            break
+          case "end":
+            regex = new RegExp(corePattern + "$", regexFlags)
+            break
+        }
+
+        func = (annotation) => ((annotation !== null) && regex.test(`${annotation}`))
+      }
+      
+      filterFunctions[field].push(func)
+    }
+  }
+
+  const filteredIndices: number[] = []
+  for (let i = 0; i < alignment.depth; ++i) {
+    let matched = true
+    for (const field of Object.keys(filterBy)) {
+      const annotation = (field === "$$sequence$$") ? alignment.sequences[i] : alignment.annotations[field][i]
+      for (let j = 0; j < filterFunctions[field].length; ++j) {
+        const func = filterFunctions[field][j]
+        const f = filterBy[field][j]
+        
+        // @ts-expect-error type
+        let m = func(annotation)
+        if (f.not) {
+          m = !m
+        }
+
+        matched = (j === 0) ? m : (f.connective === "and") ? (matched && m) : (matched || m)
+      }
+      
+      if (!matched) {
+        break
+      }
+    }
+
+    if (matched) {
+      filteredIndices.push(i)
+    }
+  }
 
   return filteredIndices
 }
@@ -527,20 +613,22 @@ export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortPara
     filteredIndices = filterAlignment(alignment) // range(0, alignment.depth)
   }
 
-  let sortedIndices: number[]
   if (!sortBy || (sortBy.length === 0)) {
     if (alignment.groupBy === false) {
       // sortedIndices = range(0, alignment.depth)
-      sortedIndices = filteredIndices
+      return filteredIndices
     } else { // sort by group index
-      sortedIndices = []
+      const filteredIndicesSet = new Set(filteredIndices)
+      const filteredSortedIndices: number[] = []
       for (const group of alignment.groups) {
         for (const sequenceIndex of group.members) {
-          sortedIndices.push(sequenceIndex)
+          if (filteredIndicesSet.has(sequenceIndex)) {
+            filteredSortedIndices.push(sequenceIndex)
+          }
         }
       }
+      return filteredSortedIndices
     }
-    return sortedIndices
   }
 
   let actualSortBy: TAlignmentSortParams[]
@@ -586,9 +674,9 @@ export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortPara
     return 0
   }
   
-  sortedIndices = range(0, alignment.depth)
-  sortedIndices.sort(cmp)
-  return sortedIndices
+  const filteredSortedIndices = filteredIndices.slice() // range(0, alignment.depth)
+  filteredSortedIndices.sort(cmp)
+  return filteredSortedIndices
 }
 
 export function setReferenceSequence(alignment: TAlignment, referenceSequenceIndex: number): TAlignment {

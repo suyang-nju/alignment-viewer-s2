@@ -319,7 +319,7 @@ export type TDimensions = {
   iconMarginRight: number,
 }
 
-export type TTextColumnFilter = {
+export type TTextColumnFilterRule = {
   type: "text",
   connective: "and" | "or",
   not: boolean,
@@ -331,10 +331,10 @@ export type TTextColumnFilter = {
   operand: string | undefined,
 } | {
   operator: "in",
-  operand: (string | undefined)[],
+  operand: string[],
 })
 
-export type TNumberColumnFilter = {
+export type TNumberColumnFilterRule = {
   type: "number",
   connective: "and" | "or",
   not: boolean,
@@ -343,12 +343,20 @@ export type TNumberColumnFilter = {
   operand: number | undefined,
 } | {
   operator: "in",
-  operand: (number | undefined)[],
+  operand: number[],
 })
 
-export type TColumnFilters = TTextColumnFilter[] | TNumberColumnFilter[]
+export type TMissingDataColumnFilterRule = {
+  type: "missing",
+  connective: "and" | "or",
+  not: boolean,
+  operator: "missing",
+  operand: undefined,
+}
 
-export type TAlignmentFilters = Record<string, TColumnFilters>
+export type TColumnFilter = Array<TTextColumnFilterRule | TNumberColumnFilterRule | TMissingDataColumnFilterRule>
+
+export type TAlignmentFilters = Record<string, TColumnFilter>
 
 export type TAlignmentViewerProps = {
   className?: string,

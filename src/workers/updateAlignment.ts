@@ -36,6 +36,7 @@ function downSample(fromSize: number, toSize: number): number[] {
 function updateAlignment(
   tasks: Array<"setReference" | "group" | "filter" | "sort" | "minimap">,
   alignment: TAlignment, 
+  filteredIndices: number[],
   filteredSortedIndices: number[],
   referenceSequenceIndex: number,
   sortBy: TAlignmentSortParams[],
@@ -54,11 +55,11 @@ function updateAlignment(
   }
 
   if (tasks.includes("filter")) {
-    filteredSortedIndices = filterAlignment(alignment, filterBy)
+    filteredIndices = filterAlignment(alignment, filterBy)
   }
 
   if (tasks.includes("sort")) {
-    filteredSortedIndices = sortAlignment(alignment, sortBy, filteredSortedIndices)
+    filteredSortedIndices = sortAlignment(alignment, sortBy, filteredIndices)
   }
   
   const overviewWidth = alignment.length, overviewHeight = filteredSortedIndices.length
@@ -124,8 +125,11 @@ function updateAlignment(
 
   return Transfer([
     alignment,
+    filteredIndices,
     filteredSortedIndices,
     overviewBuffer,
+    overviewWidth,
+    overviewHeight,
     minimapBuffer,
     minimapImageWidth, 
     minimapImageHeight,
