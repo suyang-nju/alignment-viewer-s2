@@ -1,12 +1,30 @@
 import type { IShape } from '@antv/g-canvas'
 
-import { isNumber } from 'lodash'
+import { isNumber, find } from 'lodash'
 
 import { TableColCellWithEventsAndSequence } from './base'
 
 export class SequenceColCell extends TableColCellWithEventsAndSequence {
   groupByIndicatorShape?: IShape
   // protected drawTextShape(): void {}
+
+  public getTextAndIconPosition(iconCount = 1) {
+    const position = super.getTextAndIconPosition(iconCount)
+    const iconCfg = this.getIconStyle()
+    const { x: cellX } = this.getMeta()
+    const { x: clipX, width: clipWidth } = this.spreadsheet.panelScrollGroup.getClip().getBBox()
+    let iconX = clipX + clipWidth - iconCfg.size! * iconCount - (iconCfg.margin!.left! + iconCfg.margin!.right!) * (iconCount - 1)
+
+    // const {x: minimapCellX} = find(this.spreadsheet.facet.layoutResult.colLeafNodes, { field: "$$minimap$$" })!
+    // let iconX = minimapCellX - iconCfg.size! * iconCount - (iconCfg.margin!.left! + iconCfg.margin!.right!) * (iconCount - 1)
+
+    if (iconX < cellX) {
+      iconX = cellX
+    }
+
+    position.icon.x = iconX
+    return position
+  }
 
   protected drawGroupByIndicatorShape(): void {
     const avExtraOptions = this.spreadsheet.options.avExtraOptions
