@@ -342,7 +342,7 @@ export default function Chrome() {
 
   const [isLoadingAlignment, setIsLoadingAlignment] = useState(false)
   const [error, setError] = useState<unknown>(undefined)
-  const [alignment, setAlignment] = useState<TAlignment | undefined>(undefined)
+  const [alignment, setAlignment] = useState<TAlignment | null>(null)
   const groupCount = alignment?.groups.length
 
   const [annotationFields, availableColumnsImported, availableColumnsDerived] = useMemo(() => {
@@ -408,8 +408,8 @@ export default function Chrome() {
     columnFilterRef.current?.open(field)
   }, [])
 
-  const handleLoadAlignment = useCallback((alignment: TAlignment | undefined, isLoading: boolean, error: unknown) => {
-    if (alignment !== undefined) {
+  const handleLoadAlignment = useCallback((alignment: TAlignment | null, isLoading: boolean, error: unknown) => {
+    if (alignment) {
       setAlignment(alignment)
     }
 

@@ -57,7 +57,7 @@ type TBaseSequenceAnnotations = /*(typeof DEFAULT_GROUP_ANNOTATION_VALUES) &*/ {
   __links__: {name: string, url: string}[],
 }
 
-export type TSequenceAnnotations = TBaseSequenceAnnotations & Record<string, string | number | object>
+export type TSequenceAnnotations = TBaseSequenceAnnotations & Record<string, string | number | null | Record<string, string>>
 
 export type TSequenceRecord = {
   sequence: string,
@@ -150,16 +150,16 @@ export type TAVExtraOptions = {
   positionsToStyle: TAlignmentPositionsToStyle, 
   hideUnstyledPositions: boolean,
   sprites: Sprites, 
-  alignment: TAlignment | undefined, 
+  alignment: TAlignment | null, 
   collapsedGroups: number[],
   filteredSortedDisplayedIndices: number[], 
   firstSequenceRowIndex: number, 
   firstResidueColIndex: number, 
   groupSizeAtRowIndex: number[],
   isCollapsedGroupAtRowIndex: boolean[],
-  overviewImageData: ImageData | undefined, 
+  overviewImageData: ImageData | null, 
   showMinimap: boolean, 
-  minimapImageData: ImageData | undefined, 
+  minimapImageData: ImageData | null, 
   sequenceLogos: TSequenceLogos, 
   sequenceLogosGroups: TSequenceLogos, 
   barSprites: BarSprites, 
@@ -373,7 +373,7 @@ export type TAlignmentViewerProps = {
   colorTheme: TAVColorTheme,
   darkMode?: boolean,
   adaptiveContainerRef?: MutableRefObject<HTMLElement | null>,
-  onLoadAlignment?: (alignment: TAlignment | undefined, isLoading: boolean, error: unknown) => void,
+  onLoadAlignment?: (alignment: TAlignment | null, isLoading: boolean, error: unknown) => void,
   onChangeAlignment?: (alignment: TAlignment) => void,
   onChangeSortBy?: (sortBy: TAlignmentSortParams[]) => void,
   onChangeFilterBy?: (filterBy: TAlignmentFilters) => void,

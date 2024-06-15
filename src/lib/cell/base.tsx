@@ -104,7 +104,7 @@ export class TableDataCellWithEvents extends TableDataCellWithEventsBasic implem
 
   protected getTextStyle(): TextTheme {
     let style = super.getTextStyle()
-    if (this.getMeta().fieldValue === undefined) {
+    if (this.getMeta().fieldValue === null) {
       style = {
         ...style,
         fontStyle: "italic" as const,

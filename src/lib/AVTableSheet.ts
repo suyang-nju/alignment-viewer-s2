@@ -66,9 +66,9 @@ export class AVDataSet extends TableDataSet {
     super(spreadsheet)
   }
 
-  public getCellData({ query }: CellDataParams): DataType | string | number {
+  public getCellData({ query }: CellDataParams): DataType | string | number | null {
     if (this.displayData.length === 0 && query.rowIndex === 0) {
-      return undefined
+      return null
     }
 
     const alignment = this.spreadsheet.options.avExtraOptions.alignment!
@@ -83,16 +83,16 @@ export class AVDataSet extends TableDataSet {
             case "__sequenceIndex__":
               return __sequenceIndex__
             default:
-              return alignment.annotations[query.field]?.[alignment.referenceSequenceIndex]
+              return alignment.annotations[query.field]?.[alignment.referenceSequenceIndex] ?? null
           }
         } else {
-          return (query.field === "__id__") ? SPECIAL_ROWS[__sequenceIndex__].label : rowData[query.field]
+          return (query.field === "__id__") ? SPECIAL_ROWS[__sequenceIndex__].label : rowData[query.field] ?? null
         }
       } else {
         if (query.field === SERIES_NUMBER_FIELD) {
           return query.rowIndex + 1 - (this.spreadsheet.options.frozenRowCount ?? 0)
         } else {
-          return alignment.annotations[query.field]?.[__sequenceIndex__]
+          return alignment.annotations[query.field]?.[__sequenceIndex__] ?? null
         }
       }
     } else {
@@ -1330,7 +1330,7 @@ const useDataCell = (
 
 export function useS2Options(
   avExtraOptions: TAVExtraOptions,
-  alignment: TAlignment | undefined,
+  alignment: TAlignment | null,
   columns: string[],
   pinnedColumnsCount: number,
   sortBy: TAlignmentSortParams[],
@@ -1675,7 +1675,7 @@ export function useS2ThemeCfg(
 }
 
 export function useS2DataCfg(
-  alignment: TAlignment | undefined, 
+  alignment: TAlignment | null, 
   filteredSortedDisplayedIndices: number[], 
   isCollapsedGroup: boolean[],
   columns: string[], 

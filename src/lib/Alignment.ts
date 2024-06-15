@@ -30,7 +30,7 @@ import { parseStockholm } from './stockholm'
 import getBlosum62Score from './blosum62'
 import { getObjectKeys, formatFieldName } from './utils'
 
-import { isNumber, range } from 'lodash'
+import { isNil, isNumber, range } from 'lodash'
 import { v4 as uuid4 } from 'uuid'
 
 type TAlignmentTextParser = (text: string) => {
@@ -43,7 +43,7 @@ const PARSERS: TAlignmentTextParser[] = [
   parseStockholm,
 ]
 
-export function createAlingmentFromText(name: string, text: string): TAlignment | undefined {
+export function createAlingmentFromText(name: string, text: string): TAlignment | null {
   let sequenceRecords: TSequenceRecord[] = []
   const positionalAnnotations = {} as TAlignmentPositionalAnnotations
 
@@ -64,7 +64,7 @@ export function createAlingmentFromText(name: string, text: string): TAlignment 
   }
 
   if (sequenceRecords.length === 0) {
-    return undefined
+    return null
   }
 
   Object.assign(positionalAnnotations, _positionalAnnotations)
@@ -76,7 +76,7 @@ export function createAlingmentFromSequenceRecords(
   name: string, 
   sequenceRecords: TSequenceRecord[],
   positionalAnnotations: TAlignmentPositionalAnnotations,
-): TAlignment | undefined {
+): TAlignment | null {
   const sequences: string[] = new Array(sequenceRecords.length)
   const annotationFields = {} as TSequenceAnnotationFields
   for (let i = 0; i < sequenceRecords.length; ++i) {
@@ -95,7 +95,7 @@ export function createAlingmentFromSequenceRecords(
 
   const annotations = {} as TAlignmentAnnotations
   for (const k of getObjectKeys(annotationFields)) {
-    annotations[k] = new Array(sequenceRecords.length).fill(undefined)
+    annotations[k] = new Array(sequenceRecords.length).fill(null)
   }
 
   for (let i = 0; i < sequenceRecords.length; ++i) {
@@ -116,10 +116,10 @@ export function createAlingmentFromSequenceRecords(
   Object.assign(positionalAnnotations, stats.positionalAnnotations)
 
   Object.assign(annotations, {
-    __hammingDistanceToReference__: new Array(depth).fill(undefined),
-    __hammingDistanceToConsensus__: new Array(depth).fill(undefined),
-    __blosum62ScoreToReference__: new Array(depth).fill(undefined),
-    __blosum62ScoreToConsensus__: new Array(depth).fill(undefined),
+    __hammingDistanceToReference__: new Array(depth).fill(null),
+    __hammingDistanceToConsensus__: new Array(depth).fill(null),
+    __blosum62ScoreToReference__: new Array(depth).fill(null),
+    __blosum62ScoreToConsensus__: new Array(depth).fill(null),
   })
 
   Object.assign(annotationFields, {
@@ -146,7 +146,7 @@ export function createAlingmentFromSequenceRecords(
   })
 
   for (const [k, v] of Object.entries(DEFAULT_GROUP_ANNOTATION_VALUES)) {
-    annotations[k] = new Array(depth).fill(undefined)
+    annotations[k] = new Array(depth).fill(null)
     for (let i = 0; i < depth; ++i) {
       annotations[k][i] = v
     }
@@ -205,7 +205,7 @@ export function updateAnnotations(
   annotations: TAlignmentAnnotations, 
   annotationFields: TSequenceAnnotationFields,
   matchOnField: string, 
-  data: Record<string, string>[],
+  data: Record<string, string | null>[],
 ): [TAlignmentAnnotations | undefined, TSequenceAnnotationFields | undefined, number] {
   const updatedAnnotations: TAlignmentAnnotations = {...annotations}
   const updatedAnnotationFields: TSequenceAnnotationFields = {...annotationFields}
@@ -223,21 +223,23 @@ export function updateAnnotations(
         continue
       }
 
-      const valueString = row[field]
-      const valueNumber = parseFloat(valueString)
-      let fieldValue: string | number
       let number = 0, string = 0
-      if (isNaN(valueNumber)) {
-        string = 1
-        fieldValue = valueString
-      } else {
-        number = 1
-        fieldValue = valueNumber
+      const valueString = row[field]
+      let fieldValue: string | number | null = null
+      if (valueString) {
+        const valueNumber = parseFloat(valueString)
+        if (isNaN(valueNumber)) {
+          string = 1
+          fieldValue = valueString
+        } else {
+          number = 1
+          fieldValue = valueNumber
+        }
       }
   
       if (field in updatedAnnotationFields) {
         const oldValue = updatedAnnotations[field][sequenceIndex]
-        if (oldValue === undefined) {
+        if (oldValue === null) {
           //
         } else if (isNumber(oldValue)) {
           --updatedAnnotationFields[field].number
@@ -253,7 +255,7 @@ export function updateAnnotations(
           string,
           number,
         }
-        updatedAnnotations[field] = new Array(updatedAnnotations.__id__.length).fill(undefined)
+        updatedAnnotations[field] = new Array(updatedAnnotations.__id__.length).fill(null)
         updatedAnnotations[field][sequenceIndex] = fieldValue
       }
     }

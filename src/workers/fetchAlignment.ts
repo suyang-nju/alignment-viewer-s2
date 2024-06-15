@@ -59,10 +59,10 @@ function generateRandomAlignment(row: {level1: number, level2: number}, col: {le
 async function fetcher(fileOrUrl?:File | string) {
   // console.log("Begin fetching in remoteFetcher", Date.now())
   if (!fileOrUrl) {
-    return undefined
+    return null
   }
 
-  let alignment: TAlignment | undefined
+  let alignment: TAlignment | null
   if (fileOrUrl === "random") {
     alignment = generateRandomAlignment({ level1: 10, level2: 10 }, { level3: 100, level4: 100 })
   } else {

@@ -265,13 +265,15 @@ function parseAnnotationFieldsFromUniProtDescription(actualId: string, desc: str
 export function parseSequenceIdDescription(id: string, desc: string) {
   const m = id.match(/^([^/]*)\/(\d+)-(\d+)$/)
   let actualId: string
-  let begin: number | undefined, end: number | undefined
+  let begin: number | null, end: number | null
   if (m) {
     actualId = m[1]
     begin = Number(m[2])
     end = Number(m[3])
   } else {
     actualId = id
+    begin = null
+    end = null
   }
 
   const annotations = {

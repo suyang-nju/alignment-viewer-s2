@@ -42,8 +42,8 @@ expose({
     const result = Papa.parse(fileContent, {
       header: true, 
       delimiter,
-      transform: (value) => (value || undefined),
+      transform: (value) => (value || null),
     })
-    return updateAnnotations(annotations, annotationFields, matchOnField, result.data as Record<string, string>[])
+    return updateAnnotations(annotations, annotationFields, matchOnField, result.data as Record<string, string | null>[])
   }
 })

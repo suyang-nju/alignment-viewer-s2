@@ -62,8 +62,8 @@ function updateAlignment(
   }
   
   const overviewWidth = alignment.length, overviewHeight = filteredSortedIndices.length
-  let overviewBuffer: ArrayBuffer | undefined = undefined
-  let minimapBuffer: ArrayBuffer | undefined = undefined
+  let overviewBuffer: ArrayBuffer | null = null
+  let minimapBuffer: ArrayBuffer | null = null
   let minimapImageWidth: number | undefined = undefined
   let minimapImageHeight: number | undefined = undefined
   if (tasks.includes("minimap")) {

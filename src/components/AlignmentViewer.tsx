@@ -77,7 +77,7 @@ function useChangeDetector(prompt: string, ...args: any[]) {
 }
 
 function useDimensions(
-  alignment: TAlignment | undefined,
+  alignment: TAlignment | null,
   isOverviewMode: boolean,
   fontFamily: string, 
   residueFontFamily: string,
@@ -346,7 +346,7 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
   } = alignmentViewerProps
 
   const [fileOrUrl, setFileOrUrl] = useState<File | string | undefined>(undefined)
-  const [alignment, setAlignment] = useState<TAlignment | undefined>(undefined)
+  const [alignment, setAlignment] = useState<TAlignment | null>(null)
   const [pinnedColumns, setPinnedColumns] = useState<string[]>([]) // ["__id__"]
   const [otherVisibleColumns, setOtherVisibleColumns] = useState<string[]>([])
   const [collapsedGroups, setCollapsedGroups] = useState<number[]>([])
@@ -513,8 +513,8 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
 
   // const filteredSortedIndices = useMemo(() => (sortAlignment(alignment, sortBy)), [alignment, sortBy])
   const [filteredSortedIndices, setFilteredSortedIndices] = useState<number[]>([])
-  const [overviewImageData, setOverviewImageData] = useState<ImageData | undefined>(undefined)
-  const [minimapImageData, setMinimapImageData] = useState<ImageData | undefined>(undefined)
+  const [overviewImageData, setOverviewImageData] = useState<ImageData | null>(null)
+  const [minimapImageData, setMinimapImageData] = useState<ImageData | null>(null)
 
   useEffect(() => {
     async function asyncUpdate() {
@@ -535,17 +535,17 @@ export default forwardRef(function AlignmentViewer(alignmentViewerProps: TAlignm
       const propsPositionsToStyle = alignmentViewerProps.positionsToStyle ?? "all"
 
       const tasks: Array<"setReference" | "group" | "filter" | "sort" | "minimap"> = []
-      let inputAlignment: TAlignment | undefined = undefined
+      let inputAlignment: TAlignment | null = null
       if (propsFileOrUrl && (propsFileOrUrl !== fileOrUrl)) {
-        onLoadAlignment?.(undefined, true, false)
+        onLoadAlignment?.(null, true, false)
 
         const worker = await spawn(new Worker(new URL('../workers/fetchAlignment.ts', import.meta.url), { type: 'module' }))
         inputAlignment = await worker(propsFileOrUrl)
         await Thread.terminate(worker)
 
         if (!inputAlignment || inputAlignment.depth === 0) {
-          inputAlignment = undefined
-          onLoadAlignment?.(undefined, false, true)
+          inputAlignment = null
+          onLoadAlignment?.(null, false, true)
         } else {
           onLoadAlignment?.(inputAlignment, false, false)
 
