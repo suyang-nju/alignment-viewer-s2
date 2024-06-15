@@ -140,7 +140,7 @@ export function useSequenceLogos(props: TUseSequenceLogosProps): TSequenceLogos 
         
         const letterHeight = height * percentage / 100
         ctx.fillStyle = colorPalette.get(char)?.color ?? defaultTextColor
-        const paddingBottom = 5 / letterHeight
+        const paddingBottom = (i === 0) ? 0 : Math.min(5 / letterHeight, letterHeight / 50)
         // const paddingBottom = 2 / Math.sqrt(letterHeight)
         // const k = 1/256
         // const paddingBottom = (Math.sqrt(letterHeight * letterHeight + 2 * k) - letterHeight) / k
