@@ -205,8 +205,8 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
           key: "filter-divider",
           type: "divider"
         }, {
-          key: "filter-unfilter-by-" + currentField,
-          label: <>Filter by <Text italic>{(currentField === "__sequenceIndex__")? "Sequence" : currentFieldName}</Text></>,
+          key: "filter-unfilter-by-" + ((currentField === "__sequenceIndex__") ? "$$sequence$$" : currentField),
+          label: <>Filter by <Text italic>{(currentField === "__sequenceIndex__") ? "Sequence" : currentFieldName}</Text></>,
           icon: <FaFilter/>,
         }, {
             key: "filter-by",
@@ -258,36 +258,29 @@ export function createSortMenu({
     (sortBy !== undefined) &&
     (groupBy !== undefined)
   ) {
-    const sortAscByOneColumnMenuItems: MenuProps['items'] = []
-    const sortDescByOneColumnMenuItems: MenuProps['items'] = []
-    for (const availableColumns of [availableColumnsImported, availableColumnsDerived]) {
-      for (const column of availableColumns) {
-        if ((column in GROUP_ANNOTATION_FIELDS) && (groupBy === false)) {
-          continue
-        }
-
-        const formattedFieldName = annotationFields[column]?.name
-        // console.log(annotationFields)
+    const sortAscByOneColumnMenuItems: MenuProps['items'] = createAllAnnotationColumnsMenuItems(
+      "sort-submenu-asc-",
+      (column: string) => {
         const by = find(sortBy, { field: column }) as TAlignmentSortParams | undefined
-        
-        sortAscByOneColumnMenuItems.push({
-          key: "sort-submenu-asc-" + column,
-          label: formattedFieldName,
-          icon: (by?.order === "asc") ? <CheckOutlined/> : null,
-        })
+        return (by?.order === "asc") ? <CheckOutlined/> : null
+      },
+      availableColumnsImported,
+      availableColumnsDerived,
+      annotationFields,
+      groupBy,
+    )
 
-        sortDescByOneColumnMenuItems.push({
-          key: "sort-submenu-desc-" + column,
-          label: formattedFieldName,
-          icon: (by?.order === "desc") ? <CheckOutlined/> : null,
-        })
-      }
-
-      sortAscByOneColumnMenuItems.push({ key: "divider", type: "divider" })
-      sortDescByOneColumnMenuItems.push({ key: "divider", type: "divider" })
-    }
-    sortAscByOneColumnMenuItems.pop()
-    sortDescByOneColumnMenuItems.pop()
+    const sortDescByOneColumnMenuItems: MenuProps['items'] = createAllAnnotationColumnsMenuItems(
+      "sort-submenu-desc-",
+      (column: string) => {
+        const by = find(sortBy, { field: column }) as TAlignmentSortParams | undefined
+        return (by?.order === "desc") ? <CheckOutlined/> : null
+      },
+      availableColumnsImported,
+      availableColumnsDerived,
+      annotationFields,
+      groupBy,
+    )
 
     sortSubmenuItems.push({
       key: "do-not-sort",
@@ -325,7 +318,7 @@ export function createSortMenu({
       }
     
       sortSubmenuItems.push({
-        key: "sort-submenu-divider-2",
+        key: "sort-submenu-divider-3",
         type: "divider",
       }, {
         key: "sorted-fields",
@@ -372,26 +365,25 @@ export function createShowHideColumnsMenu({
     (groupBy !== undefined) &&
     !isOverviewMode
   ) {
-    for (const availableColumns of [availableColumnsImported, availableColumnsDerived]) {
-      for (const column of availableColumns) {
-        if ((column in GROUP_ANNOTATION_FIELDS) && (groupBy === false)) {
-          continue
-        }
-
-        showHideColumnsSubmenuItems.push({
-          key: "show-hide-columns-" + column,
-          label: annotationFields[column]?.name,
-          icon: pinnedColumns.includes(column) ? <PushpinFilled/> : otherVisibleColumns.includes(column) ? <CheckOutlined/> : null,
-        })
-      }
-
-      showHideColumnsSubmenuItems.push({
-        key: "show-hide-columns-divider-" + availableColumns[0],
-        type: "divider"
-      })
-    }
+    showHideColumnsSubmenuItems.push(...createAllAnnotationColumnsMenuItems(
+      "show-hide-columns-",
+      (column: string) => (
+        pinnedColumns.includes(column) 
+          ? <PushpinFilled/> 
+          : otherVisibleColumns.includes(column) 
+            ? <CheckOutlined/> 
+            : null
+      ),
+      availableColumnsImported,
+      availableColumnsDerived,
+      annotationFields,
+      groupBy,
+    ))
 
     showHideColumnsSubmenuItems.push({
+      key: "show-hide-columns-divider-advanced",
+      type: "divider"
+    }, {
       key: "show-hide-columns-advanced", 
       label: "More Options...",
     })
@@ -435,26 +427,19 @@ export function createGroupByMenu({
       key: "do-not-group", 
       label: "Do not group",
       icon: (groupBy === false) ? <CheckOutlined/> : null,
+    }, {
+      key: "group-by-column-divider-" + availableColumnsImported[0],
+      type: "divider"
     })
 
-    for (const availableColumns of [availableColumnsImported, availableColumnsDerived]) {
-      groupByMenuItems.push({
-        key: "group-by-column-divider-" + availableColumns[0],
-        type: "divider"
-      })
-
-      for (const column of availableColumns) {
-        if (column in GROUP_ANNOTATION_FIELDS) {
-          continue
-        }
-
-        groupByMenuItems.push({
-          key: "group-by-" + column,
-          label: annotationFields[column]?.name,
-          icon: (groupBy === column) ? <CheckOutlined/> : null,
-        })
-      }
-    }
+    groupByMenuItems.push(...createAllAnnotationColumnsMenuItems(
+      "group-by-",
+      (column: string) => ((groupBy === column) ? <CheckOutlined/> : null),
+      availableColumnsImported,
+      availableColumnsDerived,
+      annotationFields,
+      groupBy,
+    ))
 
     if (isNumber(groupBy)) {
       groupByMenuItems.push({
@@ -487,7 +472,10 @@ export function createFilterByMenu({
   filterBy: TAlignmentFilters | undefined,
 }): MenuProps["items"] {
   const filterByMenuItems: MenuProps['items'] = []
-  if (filterBy !== undefined) {
+  if (
+    (groupBy !== undefined) && 
+    (filterBy !== undefined)
+  ) {
     filterByMenuItems.push({
       key: "do-not-filter", 
       label: "Do not filter",
@@ -495,52 +483,49 @@ export function createFilterByMenu({
     })
 
     filterByMenuItems.push({
-      key: "filter-by-column-divider-__sequenceIndex__",
+      key: "filter-by-column-divider-$$sequence$$",
       type: "divider"
     })
 
     filterByMenuItems.push({
-      key: "filter-by-__sequenceIndex__", 
+      key: "filter-by-$$sequence$$", 
       label: "Sequence",
-      icon: ("__sequenceIndex__" in filterBy) ? <CheckOutlined/> : null,
+      icon: ("$$sequence$$" in filterBy) ? <CheckOutlined/> : null,
+    }, {
+      key: "filter-by-column-divider-" + availableColumnsImported[0],
+      type: "divider"
     })
 
-    for (const availableColumns of [availableColumnsImported, availableColumnsDerived]) {
-      filterByMenuItems.push({
-        key: "filter-by-column-divider-" + availableColumns[0],
-        type: "divider"
-      })
-
-      for (const column of availableColumns) {
-        if ((column in GROUP_ANNOTATION_FIELDS) && (groupBy === false)) {
-          continue
-        }
-  
-        filterByMenuItems.push({
-          key: "filter-by-" + column,
-          label: annotationFields[column]?.name,
-          icon: (column in filterBy) ? <CheckOutlined/> : null,
-        })
-      }
-    }
+    filterByMenuItems.push(...createAllAnnotationColumnsMenuItems(
+      "filter-by-",
+      (column: string) => ((column in filterBy) ? <CheckOutlined/> : null),
+      availableColumnsImported,
+      availableColumnsDerived,
+      annotationFields,
+      groupBy,
+    ))
   }
 
   return fixMenuIcons(filterByMenuItems)
 }
 
 export function fixMenuIcons(items: MenuProps["items"]): MenuProps["items"] {
-  if (isNil(items)) {
+  if (!items) {
     return
   }
 
   let hasIcons = false
   const submenus = []
   for (const item of items) {
-    if (!isNil(item?.icon)) {
+    if (!item) {
+      continue
+    }
+
+    if (("icon" in item) && item.icon) {
       hasIcons = true
     }
 
-    if (item?.children) {
+    if (("children" in item) && item.children) {
       submenus.push(item.children)
     }
   }
@@ -548,11 +533,15 @@ export function fixMenuIcons(items: MenuProps["items"]): MenuProps["items"] {
   if (hasIcons) {
     const emptyIcon = <CheckOutlined style={{color: "transparent"}}/>
     for (const item of items) {
-      if ((item?.type === "group") || (item?.type === "divider")) {
+      if (!item) {
+        continue
+      }
+  
+      if (("type" in item) && ((item.type === "group") || (item.type === "divider"))) {
         continue
       }
 
-      if (item && isNil(item?.icon)) {
+      if (!item.icon) {
         item.icon = emptyIcon
       }
     }
@@ -565,20 +554,64 @@ export function fixMenuIcons(items: MenuProps["items"]): MenuProps["items"] {
   return items
 }
 
+function createAllAnnotationColumnsMenuItems(
+  keyPrefix: string,
+  getIcon: (column: string) => ReactNode,
+  availableColumnsImported: string[], 
+  availableColumnsDerived: string[],
+  annotationFields: TSequenceAnnotationFields,
+  groupBy: string | number | false | undefined,
+) {
+  const items: MenuProps["items"] = []
+  
+  for (const column of availableColumnsImported) {
+    if ((column in GROUP_ANNOTATION_FIELDS) && (groupBy === false)) {
+      continue
+    }
+
+    items.push({
+      key: keyPrefix + column,
+      label: annotationFields[column]?.name,
+      icon: getIcon(column),
+    })
+  }
+
+  // items.push({
+  //   key: keyPrefix + "divider-" + availableColumnsImported[0],
+  //   type: "divider"
+  // })
+  
+  const extraItems: MenuProps["items"] = []
+  items.push({
+    key: keyPrefix + "more-columns",
+    label: "More",
+    children: extraItems,
+  })
+
+  for (const column of availableColumnsDerived) {
+    if ((column in GROUP_ANNOTATION_FIELDS) && (groupBy === false)) {
+      continue
+    }
+
+    extraItems.push({
+      key: keyPrefix + column,
+      label: annotationFields[column]?.name,
+      icon: getIcon(column),
+    })
+  }
+
+  return items
+}
+
 function createContextMenuEventHandler(props: TContextMenuProps): Exclude<MenuProps["onClick"], undefined> {
   const {
-    isOverviewMode,
     // alignment,
-    referenceSequenceIndex, 
-    availableColumnsImported, 
-    availableColumnsDerived, 
     pinnedColumns,
     otherVisibleColumns, 
     sortBy, 
     groupBy, 
     filterBy,
     contextMenuEventInfo, 
-    paddingXS,
     setOtherVisibleColumns,
     setPinnedColumns,
     showArrangeColumns,
