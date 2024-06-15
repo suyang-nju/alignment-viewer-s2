@@ -1,5 +1,5 @@
 import type { IShape, Event as GraphEvent } from '@antv/g-canvas'
-import type { TextTheme } from '@antv/s2'
+import type { FormatResult, TextTheme } from '@antv/s2'
 import type { ReactNode } from 'react'
 
 import type { TAVMouseEventInfo } from '../types'
@@ -113,6 +113,21 @@ export class TableDataCellWithEvents extends TableDataCellWithEventsBasic implem
     }
     return style
   }
+
+  protected getFormattedFieldValue(): FormatResult {
+    const rowIndex = this.getMeta().rowIndex
+    const firstSequenceRowIndex = this.spreadsheet.options.avExtraOptions.firstSequenceRowIndex
+    const value = this.getMeta().fieldValue
+    if ((value === null) && (rowIndex < firstSequenceRowIndex)) {
+      return {
+        formattedValue: " ",
+        value
+      }
+    } else {
+      return super.getFormattedFieldValue()
+    }
+  }
+
   protected drawGroupAppendixShape(): void {
     const spreadsheet = this.spreadsheet
     const avExtraOptions = spreadsheet.options.avExtraOptions
