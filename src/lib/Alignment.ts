@@ -212,7 +212,12 @@ export function updateAnnotations(
   let updatedCount = 0
 
   for (const row of data) {
-    const sequenceIndex = updatedAnnotations.__id__.indexOf(row[matchOnField])
+    const id = row[matchOnField]
+    if (!id) {
+      continue
+    }
+
+    const sequenceIndex = updatedAnnotations.__id__.indexOf(id)
     if (sequenceIndex === -1) {
       continue
     }
