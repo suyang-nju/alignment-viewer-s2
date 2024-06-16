@@ -10,7 +10,7 @@ import FileOrUrlPicker from './FileOrUrlPicker'
 
 const exampleAlignments = [
   {
-    name: "1M sequences",
+    name: "10K random sequences",
     url: "random",
   }, {
     name: "alpha-amylase",

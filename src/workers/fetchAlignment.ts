@@ -64,7 +64,7 @@ async function fetcher(fileOrUrl?:File | string) {
 
   let alignment: TAlignment | null
   if (fileOrUrl === "random") {
-    alignment = generateRandomAlignment({ level1: 10, level2: 10 }, { level3: 100, level4: 100 })
+    alignment = generateRandomAlignment({ level1: 10, level2: 10 }, { level3: 10, level4: 10 })
   } else {
     let text: string, name = ""
     if (typeof fileOrUrl === "string") {
