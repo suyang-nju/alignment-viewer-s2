@@ -13,7 +13,7 @@ const exampleAlignments = [
     name: "β-lactamase",
     url: import.meta.env.BASE_URL + "BLAT_ECOLX.a2m"
   }, {
-    name: "alpha-amylase",
+    name: "α-amylase",
     url: import.meta.env.BASE_URL + "alpha-amylase_WT_b0.5.a2m"
   }, {
     name: "10K random sequences",
@@ -64,7 +64,7 @@ export default function AlignmentPicker({
   return (
     <Flex vertical className={className} style={style} >
       <Typography.Text>
-        Open an alignment or try the <Button type="link" style={{padding: 0}} onClick={showExamplesTab}>examples</Button> below.
+        Open an alignment or try an <Button type="link" style={{padding: 0}} onClick={showExamplesTab}>example</Button> from below:
       </Typography.Text>
       {/* <Typography.Text type="success" italic>
         No data will be sent to the server.
