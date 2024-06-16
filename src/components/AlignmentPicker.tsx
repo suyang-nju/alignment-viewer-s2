@@ -13,6 +13,9 @@ const exampleAlignments = [
     name: "10K random sequences",
     url: "random",
   }, {
+    name: "β-lactamase",
+    url: import.meta.env.BASE_URL + "BLAT_ECOLX.a2m"
+  }, {
     name: "alpha-amylase",
     url: import.meta.env.BASE_URL + "alpha-amylase_WT_b0.5.a2m"
   }
