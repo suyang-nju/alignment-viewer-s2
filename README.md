@@ -1,6 +1,6 @@
 # Alignment Viewer
 
-Website: [https://github.com/suyang-nju/alignment-viewer-s2](https://github.com/suyang-nju/alignment-viewer-s2)
+Website: [http://dev.mutationassessor.org/av/](http://dev.mutationassessor.org/av/)
 
 An alignment viewer for protein/nucleic acid multiple sequence alignments (FASTA/Stockholm).
 - Displays sequences and annotations in a spreadsheet-like UI
