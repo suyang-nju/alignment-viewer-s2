@@ -137,6 +137,15 @@ export default forwardRef(function Settings({
             */}
           </SettingsItem>
         </div>
+        <SettingsItem>
+          <Label>Lowercase letter is unaligned</Label>
+          <Switch 
+            checked={false} 
+            size="small" 
+            // onChange={(checked: boolean) => onTogglesChange(item, checked)} 
+          />
+        </SettingsItem>
+
         <div/>
         <Space>
           <Label>Show</Label>
