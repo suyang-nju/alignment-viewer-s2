@@ -25,6 +25,16 @@ export const AA1to3 = {
   Y: 'Tyr',
 }
 
+export const HIDDEN_ANNOTATION_FIELDS = [
+  "__actualId__", 
+  "__links__", 
+  "sequence", 
+  "__sequenceIndex__", 
+  "__annotationFields__", 
+  "__formattedSequences__", 
+  "$$minimap$$"
+]
+
 export type TSequenceAnnotationFields = {
   [field: string]: {
     name: string,
@@ -86,7 +96,11 @@ type TBaseSequence = (typeof DEFAULT_GROUP_ANNOTATION_VALUES) & {
 }
 
 export type TSequence = TBaseSequence & Record<string, string | number>
-
+export type TSequenceGroup = {
+  members: number[],
+  pssm: number[][],
+  pssmSortedIndices: number[][],
+}
 export type TAlignment = {
   name: string,
   uuid: string,
@@ -100,11 +114,7 @@ export type TAlignment = {
   referenceSequence: TSequence,
   annotationFields: TSequenceAnnotationFields,
   groupBy: string | undefined,
-  groups: {
-    members: number[],
-    pssm: number[][],
-    pssmSortedIndices: number[][],
-  }[],
+  groups: TSequenceGroup[],
   // --- per-position properties ---
   positionalCoverage: number[],
   pssm: number[][],
@@ -153,7 +163,8 @@ function parseFasta(text: string): TSequence[] {
     throw Error()
   }
 
-  const records = trimmedText.split(">").slice(1) // first element from after split() is always empty
+  const records = trimmedText.split("\n>")
+  records[0] = records[0].substring(1)
   let sequenceIndex = 0
   for (const rec of records) {
     const lines = rec.split(/[\r\n]+/)
@@ -438,7 +449,7 @@ function parseAnnotationFieldsFromUniProtDescription(actualId: string, desc: str
     description = desc.substring(0, matches[0].index)
   }
   
-  if (!!description) {
+  if (description) {
     annotations.description = description
     annotationFields.description = {
       name: "Description",
@@ -493,7 +504,7 @@ function parseSequenceIdDescription(id: string, desc: string) {
   let parserMatched = false
   for (const parser of SEQUENCE_ANNOTATION_PARSERS) {
     const m = actualId.match(parser.pattern)
-    if (!!!m) {
+    if (!m) {
       continue
     }
 
@@ -507,7 +518,7 @@ function parseSequenceIdDescription(id: string, desc: string) {
   }
 
   if (!parserMatched) {
-    ;({ annotations, annotationFields } = parseAnnotationFieldsDefault(actualId, desc))
+    ({ annotations, annotationFields } = parseAnnotationFieldsDefault(actualId, desc))
   }
 
   return {
@@ -560,7 +571,7 @@ export function createAlingmentFromSequences(name: string, sequences: TSequence[
   const annotationFields: TSequenceAnnotationFields = {}
   for (const rec of sequences) {
     for (const field of Object.keys(rec.__annotationFields__)) {
-      if (annotationFields.hasOwnProperty(field)) {
+      if (Object.prototype.hasOwnProperty.call(annotationFields, field)) {
         annotationFields[field].name = rec.__annotationFields__[field].name
         annotationFields[field].string += rec.__annotationFields__[field].string
         annotationFields[field].number += rec.__annotationFields__[field].number
@@ -591,6 +602,25 @@ export function createAlingmentFromSequences(name: string, sequences: TSequence[
     groupBy: undefined,
     groups: [],
   }
+}
+
+export function getAlignmentAnnotationFields(alignment: TAlignment) {
+  const importedFields: string[] = []
+  const derivedFields: string[] = []
+  if (alignment?.annotationFields) {
+    for (const field of Object.keys(alignment.annotationFields)) {
+      if (HIDDEN_ANNOTATION_FIELDS.includes(field)) {
+        continue
+      }
+
+      if (field.startsWith("__") && field.endsWith("__")) {
+        derivedFields.push(field)
+      } else {
+        importedFields.push(field)
+      }
+    }  
+  }
+  return { importedFields, derivedFields }
 }
 
 function calcPSSM(sequences: TSequence[], length: number, alphabet: string): [ number[][], number[][] ] {
@@ -873,17 +903,21 @@ export function sortAlignment(alignment: TAlignment, sortBy?: TAlignmentSortPara
   if (alignment.groupBy) {
     const groupSortBy: TAlignmentSortParams[] = []
     const otherSortBy: TAlignmentSortParams[] = []
+    let sortByGroupIndex = false
     for (const by of sortBy) {
       if ([alignment.groupBy, "__groupIndex__", "__groupSize__"].includes(by.field)) {
+        if (by.field === "__groupIndex__") {
+          sortByGroupIndex = true
+        }
         groupSortBy.push(by)
       } else {
         otherSortBy.push(by)
       }
     }
 
-    if (groupSortBy.length === 0) {
+    if (!sortByGroupIndex) {
       groupSortBy.push({
-        field: "__groupIndex",
+        field: "__groupIndex__",
         order: "asc"
       })
     }
@@ -934,7 +968,7 @@ export function setReferenceSequence(alignment: TAlignment, referenceSequenceInd
   return alignment
 }
 
-export function groupByField(alignment: TAlignment, groupBy: string): TAlignment {
+export function groupByField(alignment: TAlignment, groupBy?: string): TAlignment {
   alignment.groupBy = groupBy
   alignment.groups = []
   if (groupBy === undefined) {

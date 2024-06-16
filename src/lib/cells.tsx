@@ -252,7 +252,7 @@ function withSequence<TBase extends BaseCell & TConstructor>(Base: TBase) {
       const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
       const { width: spreadsheetWidth, height: spreadsheetHeight } = spreadsheet.getCanvasElement()
 
-      const dpr = spreadsheet.options.devicePixelRatio
+      const dpr = window.devicePixelRatio
       const renderingWidth = dpr * residueWidth * (visibleSequencePositionEnd - visibleSequencePositionStart + 1)
       this.renderingHeight = (
         sequenceIndex === "$$overview$$"
@@ -449,7 +449,7 @@ function withSequence<TBase extends BaseCell & TConstructor>(Base: TBase) {
       const visibleSequencePositionEnd = avStore.get("visibleSequencePositionEnd") as number
   
       this.drawSpecificContent(visibleSequencePositionStart, visibleSequencePositionEnd)
-      const img = this.backgroundShape.attr('img') as (OffscreenCanvas | undefined)[]
+      const img = this.backgroundShape.attr('img') as (OffscreenCanvas | ImageData | undefined)[]
       if (this.getMeta().fieldValue === "$$overview$$") {
         for (let i = 1; i < img.length; ++i) {
           img[i] = undefined
@@ -467,11 +467,6 @@ function withSequence<TBase extends BaseCell & TConstructor>(Base: TBase) {
       // implemented in subclasses
     }
 
-    protected drawBorderShape(): void {
-      console.log("drawBorderShapeSequenceDataCell")
-      // super.drawBorderShape()
-    }
-  
     updateByState(stateName: InteractionStateName): void {
       if ((stateName !== InteractionStateName.HOVER) && (stateName !== InteractionStateName.HOVER_FOCUS)) {
         super.updateByState(stateName)
@@ -602,7 +597,7 @@ export class SequenceColCell extends TableColCell {
     ctx.textBaseline = "alphabetic"
     ctx.direction = "ltr"
 
-    const dpr = this.spreadsheet.options.devicePixelRatio
+    const dpr = window.devicePixelRatio
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.translate(
       (sequencePositionStart - visibleSequencePositionStart) * residueWidth + (residueWidth + residueFontWidth)/2, 
@@ -1068,27 +1063,50 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
     const { residueWidth, residueHeight } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
     const sequenceIndex = this.getMeta().fieldValue
-    const img = this.backgroundShape.attr('img') as (OffscreenCanvas | undefined)[]
+    const img = this.backgroundShape.attr('img') as (OffscreenCanvas | ImageData | undefined)[]
     
     if (sequenceIndex === "$$overview$$") {
       const visibleSequenceIndexStart = avStore.get("visibleSequenceIndexStart") as number
       const visibleSequenceIndexEnd = avStore.get("visibleSequenceIndexEnd") as number
+      // this.backgroundShape.attr({
+      //   sx: sequencePositionStart,
+      //   sy: visibleSequenceIndexStart,
+      //   sWidth: sequencePositionEnd - sequencePositionStart + 1,
+      //   sHeight: visibleSequenceIndexEnd - visibleSequenceIndexStart + 1,
+      //   dx: Math.round(cellX + sequencePositionStart * residueWidth),
+      //   dy: Math.round(cellY + visibleSequenceIndexStart * residueHeight),
+      //   dWidth: residueWidth * (sequencePositionEnd - sequencePositionStart + 1),
+      //   dHeight: residueHeight * (visibleSequenceIndexEnd - visibleSequenceIndexStart + 1),
+      // })
+      // img[0] = avStore.get("minimapImage") as OffscreenCanvas
+
+      const sWidth = sequencePositionEnd - sequencePositionStart + 1
+      const sHeight = visibleSequenceIndexEnd - visibleSequenceIndexStart + 1
+      if (!(
+        (img[0] instanceof OffscreenCanvas) &&
+        (img[0].width >= sWidth) &&
+        (img[0].height >= sHeight)
+      )) {
+        img[0] = new OffscreenCanvas(sWidth, sHeight)
+      }
+
+      const overviewImageData = avStore.get("overviewImageData") as ImageData
+      const ctx = img[0].getContext("2d")
+      ctx?.putImageData(overviewImageData, -sequencePositionStart, -visibleSequenceIndexStart, sequencePositionStart, visibleSequenceIndexStart, sWidth, sHeight)
       this.backgroundShape.attr({
-        sx: sequencePositionStart,
-        sy: visibleSequenceIndexStart,
-        sWidth: sequencePositionEnd - sequencePositionStart + 1,
-        sHeight: visibleSequenceIndexEnd - visibleSequenceIndexStart + 1,
+        sx: 0,
+        sy: 0,
+        sWidth,
+        sHeight,
         dx: Math.round(cellX + sequencePositionStart * residueWidth),
         dy: Math.round(cellY + visibleSequenceIndexStart * residueHeight),
         dWidth: residueWidth * (sequencePositionEnd - sequencePositionStart + 1),
         dHeight: residueHeight * (visibleSequenceIndexEnd - visibleSequenceIndexStart + 1),
       })
-
-      img[0] = avStore.get("minimapImage") as OffscreenCanvas
     } else {
       const alignment = avStore.get("alignment") as TAlignment
       const sprites = avStore.get("sprites") as Sprites
-      const dpr = spreadsheet.options.devicePixelRatio
+      const dpr = window.devicePixelRatio
       this.backgroundShape.attr({
         sx: 0,
         sy: 0,
@@ -1155,7 +1173,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
     const sprites = avStore.get("sprites") as Sprites
     const dimensions = avStore.get("dimensions") as TDimensions
     const { residueWidth } = dimensions
-    const dpr = this.spreadsheet.options.devicePixelRatio
+    const dpr = window.devicePixelRatio
     const visibleSequencePositionStart = avStore.get("visibleSequencePositionStart") as number
     const alignment = avStore.get("alignment") as TAlignment
     
@@ -1206,7 +1224,7 @@ export class SequenceDataCell extends TableDataCellWithEventsAndSequence {
     // ctx.imageSmoothingEnabled = false
 
     const sequenceIndex = this.getMeta().fieldValue
-    const dpr = this.spreadsheet.options.devicePixelRatio
+    const dpr = window.devicePixelRatio
     const avStore = (this.spreadsheet as AVTableSheet).avStore
     const dimensions = avStore.get("dimensions") as TDimensions
     const { residueWidth, residueHeight } = dimensions
@@ -1384,7 +1402,7 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
 
     const { residueWidth, residueFontWidth } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
-    const dpr = this.spreadsheet.options.devicePixelRatio
+    const dpr = window.devicePixelRatio
     this.backgroundShape.attr({
       sx: 0,
       sy: 0,
@@ -1415,7 +1433,7 @@ export class BarDataCell extends TableDataCellWithEventsAndSequence {
         barHeightRatios = []
     }
 
-    const img = this.backgroundShape.attr('img') as (OffscreenCanvas | undefined)[]
+    const img = this.backgroundShape.attr('img') as (OffscreenCanvas | ImageData | undefined)[]
     for (let i = sequencePositionStart, j = i - visibleSequencePositionStart; i <= sequencePositionEnd; ++i, ++j) {
       img[j] = barSprites.get(barHeightRatios[i])
     }
@@ -1479,7 +1497,7 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
     const dimensions = avStore.get("dimensions") as TDimensions
     const { residueWidth, residueFontWidth } = dimensions
     const { x: cellX, y: cellY, height: cellHeight } = this.getCellArea()
-    const dpr = this.spreadsheet.options.devicePixelRatio
+    const dpr = window.devicePixelRatio
 
     this.backgroundShape.attr({
       sx: 0,
@@ -1493,7 +1511,7 @@ export class LogoDataCell extends TableDataCellWithEventsAndSequence {
       skipX: residueWidth,
     })
   
-    const img = this.backgroundShape.attr('img') as (OffscreenCanvas | undefined)[]
+    const img = this.backgroundShape.attr('img') as (OffscreenCanvas | ImageData | undefined)[]
     for (let i = sequencePositionStart, j = i - visibleSequencePositionStart; i <= sequencePositionEnd; ++i, ++j) {
       img[j] = sequenceLogos.get(i)
     }

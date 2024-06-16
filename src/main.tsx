@@ -10,7 +10,8 @@ import './index.css'
 
 const router = createBrowserRouter([
   {
-    path: "/",
+    // path: "/",
+    path: import.meta.env.BASE_URL,
     element: <Chrome />,
   }
 ])

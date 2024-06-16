@@ -19,7 +19,7 @@ import {
 import { BsTextCenter, BsDistributeVertical } from "react-icons/bs"
 import { isNil, find } from 'lodash'
 
-import { HIDDEN_ANNOTATION_FIELDS, } from '../lib/AVTableSheet'
+import { HIDDEN_ANNOTATION_FIELDS, } from '../lib/Alignment'
 
 
 type TContextMenuProps = {
@@ -59,7 +59,6 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
     setSortBy,
   } = props
 
-  const { Text } = Typography
   const contextMenuItems: MenuProps["items"] = []
 
   if (contextMenuTarget?.target?.cellType === "colCell") {
@@ -147,7 +146,6 @@ export function createContextMenu(props: TContextMenuProps): MenuProps {
 
   const currentSequenceIndex = (contextMenuTarget?.data as TSequence)?.__sequenceIndex__
   if (Number.isInteger(currentSequenceIndex)) {
-    console.log("currentSequenceIndex", currentSequenceIndex)
     if (referenceSequenceIndex !== currentSequenceIndex) {
       contextMenuItems.push({
         key: "set-reference-sequence",

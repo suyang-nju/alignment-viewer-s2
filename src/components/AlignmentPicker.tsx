@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 
 import { 
   theme as antdTheme, Typography, Button, Tabs, 
-  Input, Flex, Space, Upload, Spin, Alert, 
+  Input, Flex, Space, Upload, Alert, 
 } from 'antd'
 import { Keyframes, useStyleRegister } from '@ant-design/cssinjs'
 import clsx from 'clsx'
@@ -138,7 +138,7 @@ export default function AlignmentPicker({
                   size="small" 
                   className={clsx(isLoading && (url === currentUrl) && "loading-animation")}
                 >
-                  <Link to={`/?url=${url}`}>{`${name}`}</Link>
+                  <Link to={`./?url=${url}`}>{`${name}`}</Link>
                 </Button>
               )
             )

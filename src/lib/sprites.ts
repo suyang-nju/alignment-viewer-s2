@@ -49,7 +49,7 @@ export default class Sprites {
     const dpr = window.devicePixelRatio
     const canvas = new OffscreenCanvas(spriteWidth * dpr, spriteHeight * dpr)
     const ctx = canvas.getContext("2d")
-    if (!!ctx) {
+    if (ctx) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       
       let bg: string | undefined

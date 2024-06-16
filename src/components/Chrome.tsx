@@ -1,6 +1,11 @@
-"use client"
-
-import type { TAlignment, TFormattedSequences, TAlignmentPositionsToStyle, TAlignmentSortParams, TSequence } from '../lib/Alignment'
+import type {
+  TAlignment, 
+  TFormattedSequences, 
+  TAlignmentPositionsToStyle, 
+  TAlignmentSortParams, 
+  TSequence,
+  TSequenceGroup,
+} from '../lib/Alignment'
 import type { TAlignmentColorMode } from '../lib/AlignmentColorSchema'
 import type { TAlignmentViewerToggles, TContextualInfo, TSetContextualInfo, TTargetCellAndIconInfo } from './AlignmentViewer'
 import type { MouseEvent, ReactNode } from 'react'
@@ -9,7 +14,8 @@ import type { RadioChangeEvent, MenuProps } from 'antd'
 
 import { defaultTheme, darkTheme } from '../theme/themeConfig'
 import { alignmentColorModes, alignmentColorSchema } from '../lib/AlignmentColorSchema'
-import { defaultAlignmentViewerToggles, getAlignmentAnnotationFields, } from './AlignmentViewer'
+import { getAlignmentAnnotationFields } from '../lib/Alignment'
+import { defaultAlignmentViewerToggles, } from './AlignmentViewer'
 import { OVERVIEW_MODE_ZOOM } from '../lib/AVTableSheet'
 import AlignmentViewerAntdWrapper from './AlignmentViewerAntdWrapper'
 import Settings from './Settings'
@@ -182,10 +188,10 @@ const ContextualInfoTooltip = forwardRef(function ContextualInfoTooltip(props, r
   
   timeoutRef.current = window.setTimeout(() => { setContextualInfo(undefined) }, 10000)
 
-  if (!!!contextualInfo) {
+  if (!contextualInfo) {
     return null
   } else {
-    let body = (
+    const body = (
       <>
         <div className="contextual-info-tooltip-header">
           {(contextualInfo.row || contextualInfo.col) && (
@@ -252,12 +258,12 @@ export default function Chrome() {
   const startSpinningTimerRef = useRef<number>(0)
   const stopSpinningTimerRef = useRef<number>(0)
   const changeSpinning = useCallback((how: "start" | "stop", ms: number) => {
-    console.log("set spin", how === "start")
+    // console.log("set spin", how === "start")
     // if (how === "start") {
     //   setSpinning(true)
     //   return
     // }
-    setSpinning(how === "start")
+    // setSpinning(how === "start")
 
     let thisTimerRef, otherTimerRef
     if (how === "start") {
@@ -285,7 +291,7 @@ export default function Chrome() {
   }, [changeSpinning])
 
   const stopSpinning = useCallback(() => {
-    changeSpinning("stop", 500)
+    changeSpinning("stop", 200)
   }, [changeSpinning])
 
   function useStartSpinning(func: (...args: any[]) => void) {
@@ -335,7 +341,9 @@ export default function Chrome() {
       return
     }
     setIsLoadingAlignment(true)
-    setSearchParams([["url", newUrl]])
+    
+    setSearchParams([["url", newUrl]], { relative: "path" })
+
     if (file) {
       setFile(undefined)
     }
@@ -357,9 +365,9 @@ export default function Chrome() {
     setColorMode(value)
   }
 
-  const handlePositionsToStyleChange = (value: TAlignmentPositionsToStyle) => {
+  const handlePositionsToStyleChange = useStartSpinning((value: TAlignmentPositionsToStyle) => {
     setPositionsToStyle(value)
-  }
+  })
 
   const handleContextualInfoContainerChange = (event: RadioChangeEvent) => {
     setContextualInfoContainer(event.target.value)
@@ -389,6 +397,8 @@ export default function Chrome() {
   const setSortBy = useStartSpinning(_setSortBy)
   const [groupBy, _setGroupBy] = useState<string | undefined>(undefined)
   const setGroupBy = useStartSpinning(_setGroupBy)
+  const [groupCount, setGroupCount] = useState(0)
+  const [collapsibleGroups, setCollapsibleGroups] = useState<number[]>([])
   const [collapsedGroups, _setCollapsedGroups] = useState<number[]>([])
   const setCollapsedGroups = useStartSpinning(_setCollapsedGroups)
 
@@ -400,49 +410,6 @@ export default function Chrome() {
     setGroupBy(by)
     setCollapsedGroups([])
   }, [groupBy, setGroupBy, setCollapsedGroups, startSpinning])
-  
-  useEffect(() => {
-    if (!alignment) {
-      return
-    }
-
-    async function asyncUpdate(alignment: TAlignment, referenceSequenceIndex: number, groupBy: string | undefined) {
-      let result: TAlignment = alignment
-
-      if (alignment?.referenceSequenceIndex !== referenceSequenceIndex) {
-        const worker = new Worker(new URL('../workers/setReferenceSequence.ts', import.meta.url), { type: 'module' })
-        const remoteSetReferenceSequence = await spawn(worker)
-        const newAlignment = await remoteSetReferenceSequence(result, referenceSequenceIndex) as TAlignment
-        result = {
-          ...result, 
-          sequences: newAlignment.sequences,
-          referenceSequenceIndex: newAlignment.referenceSequenceIndex,
-          referenceSequence: newAlignment.referenceSequence,
-        }
-        await Thread.terminate(remoteSetReferenceSequence)
-      }
-  
-      if (alignment.groupBy !== groupBy) {
-        const worker = new Worker(new URL('../workers/groupSequences.ts', import.meta.url), { type: 'module' })
-        const remoteGroupSequences = await spawn(worker)
-        const newAlignment = await remoteGroupSequences(result, groupBy) as TAlignment
-        result = {
-          ...result, 
-          groupBy: newAlignment.groupBy,
-          groups: newAlignment.groups,
-          sequences: newAlignment.sequences,
-        }
-        await Thread.terminate(remoteGroupSequences)
-      }
-
-      if (result !== alignment) {
-        mutate(result, { populateCache: true, revalidate: false })
-      }  
-    }
-
-    // console.log("set reference index")
-    asyncUpdate(alignment, referenceSequenceIndex, groupBy)
-  }, [alignment, referenceSequenceIndex, groupBy, mutate])
 
   // derived states, needs to be updated / re-initialized upon alignment change
   useEffect(() => {
@@ -486,7 +453,7 @@ export default function Chrome() {
   const contextMenu = useMemo((): MenuProps => {
     return createContextMenu({
       isOverviewMode,
-      referenceSequenceIndex: alignment?.referenceSequenceIndex, 
+      referenceSequenceIndex, 
       annotationFields: alignment?.annotationFields,
       availableColumnsImported, 
       availableColumnsDerived, 
@@ -504,7 +471,7 @@ export default function Chrome() {
     })
   }, [
     isOverviewMode,
-    alignment?.referenceSequenceIndex, 
+    referenceSequenceIndex, 
     alignment?.annotationFields,
     availableColumnsImported, 
     availableColumnsDerived, 
@@ -589,28 +556,32 @@ export default function Chrome() {
   }, [collapsedGroups, setCollapsedGroups])
 
   const handleExpandCollapseAllGroupsIconClick = useCallback(() => {
-    if (alignment?.groups?.length) {
-      const collapsibleGroups: number[] = []
-      for (let groupIndex = 0; groupIndex < alignment.groups.length; ++groupIndex) {
-        if (alignment.groups[groupIndex].members.length > 1) {
+    if (
+      (collapsibleGroups.length > 0) && 
+      (collapsedGroups.length === collapsibleGroups.length)
+    ) {
+      setCollapsedGroups([])
+    } else {
+      setCollapsedGroups(collapsibleGroups)
+    }
+  }, [collapsibleGroups, collapsedGroups, setCollapsedGroups])
+
+  const handleAlignmentGroupsChanged = useCallback((groups: TSequenceGroup[]) => {
+    setGroupCount(groups.length)
+
+    const collapsibleGroups: number[] = []
+    if (groups.length) {
+      for (let groupIndex = 0; groupIndex < groups.length; ++groupIndex) {
+        if (groups[groupIndex].members.length > 1) {
           collapsibleGroups.push(groupIndex)
         }
       }
-  
-      if (collapsibleGroups.length === 0) {
-        return
-      } else if (collapsedGroups.length === collapsibleGroups.length) {
-        setCollapsedGroups([])
-      } else {
-        if (collapsibleGroups.length > 0) {
-          setCollapsedGroups(collapsibleGroups)
-        }
-      }
     }
-  }, [alignment?.groups, collapsedGroups, setCollapsedGroups])
+    setCollapsibleGroups(collapsibleGroups)
+  }, [])
 
   const handleAlignmentViewerBusy = useCallback((isBusy: boolean) => {
-    console.log("before render")
+    // console.log("handleAlignmentViewerBusy isBusy", isBusy)
     if (isBusy) {
       startSpinning()
     } else {
@@ -619,43 +590,45 @@ export default function Chrome() {
     // console.log("set spinning true", Date.now())
   }, [startSpinning, stopSpinning])
 
+  const adaptiveContainerRef = useRef<HTMLDivElement>(null)
   const memoizedAlignmentViewer = useMemo(() => {
     if (!alignment) {
       return undefined
     }
     return (
-      <Dropdown menu={contextMenu} trigger={['contextMenu']} disabled={contextMenu.items?.length === 0} >
-        <AlignmentViewerAntdWrapper 
-          style={{flexGrow: 1, overflow: "auto"}}
-          alignment={alignment}
-          // referenceSequenceIndex={referenceSequenceIndex}
-          showColumns={showColumns}
-          pinnedColumns={pinnedColumns}
-          sortBy={sortBy}
-          collapsedGroups={collapsedGroups}
-          residueFontFamily="monospace"
-          toggles={toggles}
-          zoom={zoom}
-          isOverviewMode={isOverviewMode}
-          alignmentColorPalette={alignmentColorSchema[colorScheme]}
-          alignmentColorMode={colorMode}
-          positionsToStyle={positionsToStyle}
-          darkMode={darkMode}
-          onMouseHover={handleAlignmentViewerMouseHover}
-          onSortActionIconClick={handleSortActionIconClick}
-          onExpandCollapseGroupIconClick={handleExpandCollapseGroupIconClick}
-          onExpandCollapseAllGroupsIconClick={handleExpandCollapseAllGroupsIconClick}
-          onContextMenu={setContextMenuTarget}
-          onBusy={handleAlignmentViewerBusy}
-        />
-      </Dropdown>
+      <AlignmentViewerAntdWrapper 
+        alignment={alignment}
+        referenceSequenceIndex={referenceSequenceIndex}
+        showColumns={showColumns}
+        pinnedColumns={pinnedColumns}
+        sortBy={sortBy}
+        groupBy={groupBy}
+        collapsedGroups={collapsedGroups}
+        residueFontFamily="monospace"
+        toggles={toggles}
+        zoom={zoom}
+        isOverviewMode={isOverviewMode}
+        alignmentColorPalette={alignmentColorSchema[colorScheme]}
+        alignmentColorMode={colorMode}
+        positionsToStyle={positionsToStyle}
+        darkMode={darkMode}
+        adaptiveContainerRef={adaptiveContainerRef}
+        onMouseHover={handleAlignmentViewerMouseHover}
+        onSortActionIconClick={handleSortActionIconClick}
+        onExpandCollapseGroupIconClick={handleExpandCollapseGroupIconClick}
+        onExpandCollapseAllGroupsIconClick={handleExpandCollapseAllGroupsIconClick}
+        onContextMenu={setContextMenuTarget}
+        onBusy={handleAlignmentViewerBusy}
+        onGroupsChanged={handleAlignmentGroupsChanged}
+      />
     )
   }, [
     alignment,
-    // referenceSequenceIndex, 
+    referenceSequenceIndex,
     showColumns,
     pinnedColumns,
     sortBy,
+    groupBy,
     collapsedGroups,
     toggles,
     zoom,
@@ -664,16 +637,15 @@ export default function Chrome() {
     colorMode,
     positionsToStyle,
     darkMode,
-    contextMenu,
     handleAlignmentViewerMouseHover,
     handleSortActionIconClick,
     handleExpandCollapseGroupIconClick,
     handleExpandCollapseAllGroupsIconClick,
+    handleAlignmentGroupsChanged,
     handleAlignmentViewerBusy,
   ])
 
-
-  console.log("in chrome component: spinning", spinning)
+  // console.log("in chrome component: spinning", spinning)
   // console.log("in chrome, spinning =", spinning, Date.now())
   // console.log("render Chrome")
   return (
@@ -691,26 +663,33 @@ export default function Chrome() {
               <>
                 <ActionMenuButton menu={showHideColumnsMenu}>Show / Hide</ActionMenuButton>
                 <ActionMenuButton menu={sortMenu} checked={sortBy.length > 0}>Sort</ActionMenuButton>
-                <ActionMenuButton menu={groupMenu} checked={!!(alignment?.groupBy)}>
-                  {((alignment?.groupBy)) ? `${alignment.groups.length} Groups` :"Group"}
+                <ActionMenuButton menu={groupMenu} checked={!!groupBy}>
+                  {groupBy ? `${groupCount} Groups` : "Group"}
                 </ActionMenuButton>
               </> 
             ) : null
             }
           </Space>
         </Flex>
-        {memoizedAlignmentViewer || (
-          <Welcome
-            style={{flexGrow: 1}}
-            file={file}
-            isLoading={isLoadingAlignment} // {isLoading}
-            error={error}
-            onFileChange={handleFileChange}
-            onUrlChange={handleUrlChange}
-          />
-        )
-        }
+        <Dropdown menu={contextMenu} trigger={['contextMenu']} disabled={contextMenu.items?.length === 0} >
+          <div ref={adaptiveContainerRef} style={{flexGrow: 1, overflow: "auto"}}>
+            {memoizedAlignmentViewer ? (
+                memoizedAlignmentViewer
+            ) : (
+              <Welcome
+                style={{flexGrow: 1}}
+                file={file}
+                isLoading={isLoadingAlignment} // {isLoading}
+                error={error}
+                onFileChange={handleFileChange}
+                onUrlChange={handleUrlChange}
+              />
+            )
+            }
+          </div>
+        </Dropdown>
         <Flex className="test-spin-wrapper" align='center' justify='center' style={{display: spinning? "flex" : "none"}}>
+          <div className="test-spin-mask"/>
           <Spin indicator={<LoadingOutlined style={{fontSize: 36}} spin />} />
         </Flex>
         {(contextualInfoContainer === "status bar") ?

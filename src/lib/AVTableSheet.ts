@@ -76,24 +76,26 @@ export const SPECIAL_ROWS = {
 const FOREGROUND_GROUP_MINIMAP_GROUP_Z_INDEX = 10
 const KEY_FOREGROUND_GROUP_MINIMAP_GROUP = "minimapGroup"
 export const OVERVIEW_MODE_ZOOM = 5
-export const HIDDEN_ANNOTATION_FIELDS = ["__actualId__", "__links__", "sequence", "__sequenceIndex__", "__annotationFields__", "__formattedSequences__", "$$minimap$$"]
 
+export type TAVExtraOptions = Record<string, any>
 export class AVTableSheet extends TableSheet {
   public readonly id = Math.random()
   public avStore = new Store()
   protected minimapBackgroundShape?: IShape
   protected minimapShape?: IShape
   protected minimapViewportShape?: IShape
-  // protected prevScrollX? = 0
+  protected maxScrollOffsetY = 0
   protected prevScrollY? = 0
   protected isMinimapScrolling = false
   protected minimapScrollAnchorY = 0
   // protected minimapHeight = 0
   // protected minimapRealHeight = 0
   protected sequenceGroupDividerGroup?: IGroup
+  protected checkContextLostTimeInterval: number = 0
 
-  constructor(dom: S2MountContainer, dataCfg: S2DataConfig, options: S2Options) {
+  constructor(dom: S2MountContainer, dataCfg: S2DataConfig, options: S2Options, initialAVStore: TAVExtraOptions) {
     super(dom, dataCfg, options)
+    this.updateAVStore(initialAVStore)
     this.avStore.set("visibleSequencePositionStart", -1)
     this.avStore.set("visibleSequencePositionEnd", -1)
     this.avStore.set("visibleSequenceIndexStart", -1)
@@ -101,6 +103,12 @@ export class AVTableSheet extends TableSheet {
     this.on(S2Event.GLOBAL_SCROLL, this.handleScrollbarScroll.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_MOVE, this.handleMouseMove.bind(this))
     this.on(S2Event.GLOBAL_MOUSE_UP, this.handleMouseUp.bind(this))
+  }
+
+  updateAVStore(newAVStore: TAVExtraOptions) {
+    for (const [k, v] of Object.entries(newAVStore)) {
+      this.avStore.set(k, v)
+    }
   }
 
   protected buildFacet(): void {
@@ -112,7 +120,7 @@ export class AVTableSheet extends TableSheet {
       ctx.fontKerning = "none"
     }
   
-    // console.log("buildFacet")
+    console.log("buildFacet")
     this.minimapBackgroundShape?.off("mousedown")
     this.minimapShape?.off("mousedown")
     this.minimapViewportShape?.off("mousedown")
@@ -159,21 +167,25 @@ export class AVTableSheet extends TableSheet {
   }
 
   protected minimapScrollTo(y: number) {
-    const maxMinimapOffsetY = this.minimapBackgroundShape?.attr("height") - this.minimapViewportShape?.attr("height")
-    let minimapOffsetY = y - this.minimapBackgroundShape?.attr("y")
-    // console.log("minimapOffsetY", minimapOffsetY, y, this.minimapBackgroundShape?.attr("y"))
+    let maxMinimapOffsetY = this.minimapShape?.attr("height") - this.minimapViewportShape?.attr("height")
+    if (maxMinimapOffsetY < 0) {
+      maxMinimapOffsetY = 0
+    }
+
+    let minimapOffsetY = y - this.minimapShape?.attr("y")
     if (minimapOffsetY < 0) {
       minimapOffsetY = 0
     } else if (minimapOffsetY > maxMinimapOffsetY) {
       minimapOffsetY = maxMinimapOffsetY
     }
+
     this.updateScrollOffset({
       offsetX: {
         value: this.facet.getScrollOffset().scrollX,
         animate: false,
       },
       offsetY: {
-        value: minimapOffsetY * this.facet.getRealHeight() / this.minimapShape?.attr("height"),
+        value: (maxMinimapOffsetY === 0) ? 0 : this.maxScrollOffsetY * minimapOffsetY / maxMinimapOffsetY,
         animate: false,
       },
     })
@@ -183,12 +195,21 @@ export class AVTableSheet extends TableSheet {
     this.updateSequenceCells()
     this.renderSequenceGroupDividers()
 
-    const scrollY = position.scrollY ?? 0
+    let scrollY = position.scrollY ?? 0
+    if (scrollY > this.maxScrollOffsetY) {
+      scrollY = this.maxScrollOffsetY
+    }
+
     if (scrollY !== this.prevScrollY) {
-      // const height = this.facet.panelBBox.height
-      // const realHeight = this.facet.getRealHeight()
-      // this.minimapViewportShape?.attr('y', this.minimapShape?.attr('y') + scrollY / this.realHeight * this.height)
-      this.minimapViewportShape?.attr('y', this.minimapShape?.attr('y') + scrollY * this.minimapShape?.attr("height") / this.facet.getRealHeight())
+      const { y: minimapY, height: minimapHeight } = this.minimapShape?.attr() ?? {}
+      const minimapViewportHeight = this.minimapViewportShape?.attr("height")
+      let minimapViewportY: number
+      if (this.maxScrollOffsetY === 0) {
+        minimapViewportY = minimapY
+      } else {
+        minimapViewportY = minimapY + (minimapHeight - minimapViewportHeight) * scrollY / this.maxScrollOffsetY
+      }
+      this.minimapViewportShape?.attr('y', minimapViewportY)
     }
     this.prevScrollY = scrollY
   }
@@ -198,7 +219,7 @@ export class AVTableSheet extends TableSheet {
     const alignment = this.avStore.get("alignment") as TAlignment
     const isOverviewMode = this.avStore.get("isOverviewMode") as boolean
     const dimensions = this.avStore.get("dimensions") as TDimensions
-    if (!!!dimensions) {
+    if (!dimensions) {
       return
     }
     
@@ -283,13 +304,14 @@ export class AVTableSheet extends TableSheet {
   }
 
   renderMinimap() {
+    console.log("render minimap")
     const minimapImage = this.avStore.get("minimapImage") as OffscreenCanvas
-    if (!!!minimapImage) {
+    if (!minimapImage) {
       return
     }
 
     const dimensions = this.avStore.get("dimensions") as TDimensions
-    if (!!!dimensions) {
+    if (!dimensions) {
       return
     }
 
@@ -307,28 +329,35 @@ export class AVTableSheet extends TableSheet {
       return ShapeBaseSupportingOffscreenCanvas
     }
 
+    const scrollbarSize = this.avStore.get("scrollbarSize") as number
     const minimapColNode = this.facet.layoutResult.colLeafNodes.find((node) => node.field === "$$minimap$$") as S2Node
+    const minimapBackgroundWidth = minimapColNode.width - scrollbarSize
+    const minimapBackgroundHeight = panelGroupHeight
+    const minimapBackgroundX = minimapColNode.x
+    const minimapBackgroundY = panelGroupY
     this.minimapBackgroundShape = minimapGroup.addShape('rect', {
       zIndex: 1,
       attrs: {
-        x: minimapColNode.x, 
-        y: panelGroupY,
-        width: minimapColNode?.width - (this.facet.vScrollBar?.getBBox().width ?? 0), 
-        height: panelGroupHeight, 
+        x: minimapBackgroundX, 
+        y: minimapBackgroundY,
+        width: minimapBackgroundWidth, 
+        height: minimapBackgroundHeight, 
         fill: this.theme.background?.color,
       }
     })
 
-    const minimapMaxWidth = minimapColNode?.width - 2 * dimensions.minimapMargin
+    const minimapMaxWidth = minimapBackgroundWidth - 2 * dimensions.minimapMargin
     const minimapMaxHeight = panelGroupHeight
     const scale = Math.min(minimapMaxWidth / minimapImage.width, minimapMaxHeight / minimapImage.height)
     const minimapWidth = scale * minimapImage.width
     const minimapHeight = scale * minimapImage.height
+    const minimapX = minimapBackgroundX + (minimapBackgroundWidth - minimapWidth) / 2 // + minimapMargin,
+    const minimapY = minimapBackgroundY
     this.minimapShape = minimapGroup.addShape('offscreenCanvas', {
       zIndex: 2, 
       attrs: {
-        x: this.minimapBackgroundShape.attr("x") + (this.minimapBackgroundShape.attr("width") - minimapWidth) / 2, // + minimapMargin,
-        y: this.minimapBackgroundShape.attr("y"),
+        x: minimapX,
+        y: minimapY,
         width: minimapWidth,
         height: minimapHeight,
         img: minimapImage,
@@ -336,10 +365,35 @@ export class AVTableSheet extends TableSheet {
       }
     })
 
-    const minimapViewportX = Math.round(minimapColNode.x + (minimapMaxWidth - minimapWidth) / 2)
-    const minimapViewportY = Math.round(this.minimapBackgroundShape.attr("y") + (this.facet.getScrollOffset().scrollY ?? 0) * this.minimapBackgroundShape?.attr("height") / this.facet.getRealHeight())
-    const minimapViewportHeight = Math.round(minimapHeight * panelGroupHeight / this.facet.getRealHeight())
-    const minimapViewportWidth = Math.round(Math.max(this.minimapBackgroundShape?.attr("width") - 2 * dimensions.minimapMargin, minimapWidth))
+    // const minimapViewportX = Math.round(minimapColNode.x + (minimapMaxWidth - minimapWidth) / 2)
+    let minimapViewportX = minimapBackgroundX + dimensions.minimapMargin
+    if (minimapViewportX > minimapX) {
+      minimapViewportX = minimapX
+    }
+    // const minimapViewportWidth = Math.round(Math.max(minimapMaxWidth, minimapWidth))
+    const minimapViewportWidth = minimapBackgroundWidth - 2 * (minimapViewportX - minimapBackgroundX)
+
+    const { height: frozenRowGroupHeight } = this.frozenRowGroup.getClip().getBBox()
+    const scrollableHeight = this.facet.getRealHeight() - frozenRowGroupHeight // total height that's scrollable
+    const { height: panelScrollGroupHeight } = this.panelScrollGroup.getClip().getBBox()
+    this.maxScrollOffsetY = scrollableHeight - panelScrollGroupHeight
+    if (this.maxScrollOffsetY < 0) {
+      this.maxScrollOffsetY = 0
+    }
+
+    const minimapViewportHeight = minimapHeight * panelScrollGroupHeight / scrollableHeight
+    let { scrollY = 0} = this.facet.getScrollOffset()
+    if (scrollY > this.maxScrollOffsetY) {
+      scrollY = this.maxScrollOffsetY
+    }
+
+    let minimapViewportY: number
+    if (this.maxScrollOffsetY === 0) {
+      minimapViewportY = minimapY
+    } else {
+      minimapViewportY = minimapY + (minimapHeight - minimapViewportHeight) * scrollY / this.maxScrollOffsetY
+    }
+
     this.minimapViewportShape = minimapGroup.addShape('rect', {
       zIndex: 1,
       attrs: {
@@ -444,15 +498,15 @@ export class AVTableSheet extends TableSheet {
 }
 
 export type TColumnWidths = {
-  alignmentUuid: string,
-  isGrouped: boolean,
+  alignmentUuid: string | undefined,
   fieldWidths: Record<string, number>,
+  isGrouped: boolean,
+  isOverviewMode: boolean,
   isResizing: boolean,
 }
 
 export function useS2Options(
-  devicePixelRatio: number,
-  alignment: TAlignment,
+  alignment: TAlignment | null,
   columns: string[],
   columnWidthsRef: MutableRefObject<TColumnWidths>,
   pinnedColumnsCount: number,
@@ -473,7 +527,11 @@ export function useS2Options(
     let defaultRowHeight: number
     if (isOverviewMode) {
       // overview mode: entire alignment in one cell
-      defaultRowHeight = dimensions.rowHeight * alignment.depth + dimensions.paddingTop + dimensions.paddingBottom
+      if (alignment?.depth) {
+        defaultRowHeight = dimensions.rowHeight * alignment.depth + dimensions.paddingTop + dimensions.paddingBottom
+      } else {
+        defaultRowHeight = 0
+      }
     } else {
       defaultRowHeight = dimensions.rowHeight + dimensions.paddingTop + dimensions.paddingBottom
     }
@@ -482,7 +540,7 @@ export function useS2Options(
     const descendingColumns: string[] = []
     const otherSortableColumns: string[] = []
     const unsortableColumns = [SERIES_NUMBER_FIELD, "__sequenceIndex__", "$$minimap$$"]
-    for (let by of sortBy) {
+    for (const by of sortBy) {
       if (by.order === 'asc') {
         ascendingColumns.push(by.field)
       } else {
@@ -490,7 +548,7 @@ export function useS2Options(
       }
     }
 
-    for (let c of columns) {
+    for (const c of columns) {
       if (ascendingColumns.includes(c) || descendingColumns.includes(c) || unsortableColumns.includes(c)) {
         continue
       }
@@ -498,7 +556,7 @@ export function useS2Options(
     }
 
     const iconConditions = []
-    if (alignment.groupBy) {
+    if (alignment?.groupBy) {
       iconConditions.push(
         {
           // actual mapping is implemented in SequenceSeriesCell class
@@ -601,7 +659,6 @@ export function useS2Options(
         icon: iconConditions,
       },
       hdAdapter: false,
-      devicePixelRatio,
       tooltip: {
         showTooltip: false,
       },
@@ -636,18 +693,22 @@ export function useS2Options(
         hoverFocus: false,
       },
       layoutCoordinate: (spreadsheet: SpreadSheet, rowNode: S2Node, colNode: S2Node) => {
-        if (!!!colNode) {
+        if (!colNode) {
           return
         }
 
-        if ((!columnWidthsRef.current.isResizing) && (alignment.uuid === columnWidthsRef.current.alignmentUuid)) {
+        if (
+          (!columnWidthsRef.current.isResizing) && 
+          (alignment?.uuid === columnWidthsRef.current.alignmentUuid) &&
+          (isOverviewMode === columnWidthsRef.current.isOverviewMode)
+        ) {
           const colWidth = columnWidthsRef.current.fieldWidths[colNode.field]
-          const isGrouped = !!alignment.groupBy
           if (
             (colWidth !== undefined) && 
+            (colNode.field !== "$$minimap$$") &&
             (
               (colNode.field !== SERIES_NUMBER_FIELD) || 
-              (columnWidthsRef.current.isGrouped === !!alignment.groupBy)
+              (columnWidthsRef.current.isGrouped === !!alignment?.groupBy)
             )
           ) {
             colNode.width = colWidth
@@ -662,8 +723,8 @@ export function useS2Options(
 
         switch (colNode.field) {
           case "$$minimap$$":
-            if (showMinimap) {
-              const dpr = spreadsheet.options.devicePixelRatio
+            if (showMinimap && alignment?.length && alignment?.depth) {
+              const dpr = window.devicePixelRatio
               const maxMinimapHeight = spreadsheet.getCanvasElement().height / dpr - dimensions.colHeight
               const scale = Math.min(dimensions.maxMinimapWidth / alignment.length, maxMinimapHeight / alignment.depth)
               const minimapWidth = Math.max(scale * alignment.length, dimensions.minMinimapWidth)
@@ -673,7 +734,9 @@ export function useS2Options(
             }
             break
           case "__sequenceIndex__":
-            colNode.width = dimensions.residueWidth * alignment.length // + scrollbarSize, // + dimensions.paddingLeft + dimensions.paddingRight
+            if (alignment?.length) {
+              colNode.width = dimensions.residueWidth * alignment.length // + scrollbarSize, // + dimensions.paddingLeft + dimensions.paddingRight
+            }
             break
         }
       },
@@ -696,14 +759,14 @@ export function useS2Options(
           let renderer: TableDataCell
           if (isNumber(sequenceIndex)) {
             renderer = SequenceDataCell
-            if (alignment.groupBy) {
+            if (alignment?.groupBy) {
               const groupIndex = alignment.sequences[sequenceIndex].__groupIndex__
               if (collapsedGroups.includes(groupIndex)) {
                 renderer = LogoDataCell
               }
             }
           } else {
-            renderer = SPECIAL_ROWS[sequenceIndex]?.renderer ?? SequenceDataCell
+            renderer = SPECIAL_ROWS[sequenceIndex as keyof typeof SPECIAL_ROWS]?.renderer ?? SequenceDataCell
           }
           return new renderer(viewMeta, viewMeta?.spreadsheet)
         } else if (viewMeta.valueField === "$$minimap$$") {
@@ -716,7 +779,6 @@ export function useS2Options(
       },
     } as SheetComponentOptions
   }, [
-    devicePixelRatio,
     columns,
     columnWidthsRef,
     pinnedColumnsCount, 
@@ -727,11 +789,11 @@ export function useS2Options(
     iconSize,
     iconMarginLeft,
     iconMarginRight, 
-    alignment.uuid,
-    alignment.length, 
-    alignment.depth,
-    alignment.groupBy,
-    alignment.sequences,
+    alignment?.uuid,
+    alignment?.length, 
+    alignment?.depth,
+    alignment?.groupBy,
+    alignment?.sequences,
     rowHeightsByField, 
     highlightCurrentSequence, 
     scrollbarSize,
@@ -894,23 +956,28 @@ export function useS2ThemeCfg(
   ])
 }
 
+type TAVTableDataType = {
+  id: string,
+  __sequenceIndex__: string | number,
+}
+
 export function useS2DataCfg(
-  alignment: TAlignment, 
+  alignment: TAlignment | null, 
   sortedDisplayedIndices: number[], 
   columns: string[], 
   isOverviewMode: boolean,
 ) {
   return useMemo(() => {
-    const data = []
+    const data: TAVTableDataType[] = []
     for (const key of Object.keys(SPECIAL_ROWS) as (keyof typeof SPECIAL_ROWS)[]) {
       data.push({ id: SPECIAL_ROWS[key].label, __sequenceIndex__: key })
     }
 
     if (isOverviewMode) {
       data.push({id: "$$overview$$", __sequenceIndex__: "$$overview$$"})
-    } else {
+    } else if (alignment?.sequences) {
       for (const i of sortedDisplayedIndices) {
-        data.push(alignment.sequences[i])
+        data.push(alignment?.sequences[i])
       }
     }
 
@@ -921,7 +988,7 @@ export function useS2DataCfg(
         },
         meta: columns.map((field: string) => ({
           field, 
-          name: alignment.annotationFields[field]?.name ?? formatFieldName(field)
+          name: alignment?.annotationFields[field]?.name ?? formatFieldName(field)
         })),
         data,
         // sortParams: [
@@ -934,5 +1001,5 @@ export function useS2DataCfg(
       firstResidueColIndex: columns.length - 1,
       firstSequenceRowIndex: Object.keys(SPECIAL_ROWS).length
     })
-  }, [columns, alignment.annotationFields, sortedDisplayedIndices, alignment.sequences, isOverviewMode])
+  }, [columns, alignment?.annotationFields, sortedDisplayedIndices, alignment?.sequences, isOverviewMode])
 }
